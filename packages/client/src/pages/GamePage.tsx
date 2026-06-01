@@ -91,16 +91,17 @@ function TiebreakerModal({
         <div className="text-center mb-6">
           <div className="text-3xl mb-2">⚖️</div>
           <h2 className="font-oswald font-bold text-xl text-bunker-text uppercase">
-            {isHostDeciding ? 'Вирішальний голос' : 'Переголосування'}
+            {isHostDeciding ? t('game.tiebreaker.decidingVote') : t('game.tiebreaker.revote')}
           </h2>
           {isHostDeciding && !isDecider && decidingPlayerId && (
             <p className="font-inter text-sm text-bunker-muted mt-2">
-              {players.find((p) => p.playerId === decidingPlayerId)?.nickname ?? ''} вирішує
+              {players.find((p) => p.playerId === decidingPlayerId)?.nickname ?? ''}{' '}
+              {t('game.tiebreaker.decidingLabel')}
             </p>
           )}
           {!isHostDeciding && (
             <p className="font-inter text-sm text-bunker-muted mt-2">
-              Голосуйте між зв'язаними гравцями
+              {t('game.tiebreaker.votingBetweenTied')}
             </p>
           )}
         </div>
@@ -121,7 +122,7 @@ function TiebreakerModal({
 
         {isHostDeciding && !isDecider && (
           <p className="text-center font-inter text-bunker-muted text-sm">
-            Очікуємо на рішення…
+            {t('game.tiebreaker.waitingDecision')}
           </p>
         )}
       </div>
@@ -266,7 +267,7 @@ function GamePage(): JSX.Element {
     if (gameEnded) return <GameOverScreen />;
     return (
       <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
-        <p className="font-oswald text-xl text-bunker-muted animate-pulse">Завантаження…</p>
+        <p className="font-oswald text-xl text-bunker-muted animate-pulse">{t('game.loading')}</p>
       </div>
     );
   }
@@ -465,7 +466,7 @@ function GamePage(): JSX.Element {
                 {t('game.eliminated.spectator')}
               </p>
               <p className="font-inter text-sm text-bunker-muted/60 mt-1">
-                👁 Ви спостерігаєте
+                {t('game.spectatorWatching')}
               </p>
             </div>
           ) : ownCharacter ? (
@@ -531,7 +532,7 @@ function GamePage(): JSX.Element {
               </p>
               {hasVoted ? (
                 <p className="font-inter text-xs text-bunker-success">
-                  ✓ Ваш голос зараховано.
+                  {t('game.vote.voteCounted')}
                   {voteWaitingFor > 0 && (
                     <span className="text-bunker-muted"> {t('game.vote.waiting', { count: voteWaitingFor })}</span>
                   )}

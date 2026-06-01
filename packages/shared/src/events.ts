@@ -39,6 +39,8 @@ export const EVENTS = {
   HOST_FORCE_VOTE: 'host:forceVote',
   HOST_END_GAME: 'host:endGame',
   HOST_PLAY_AGAIN: 'host:playAgain',
+  HOST_END_SESSION: 'host:endSession',
+  ROOM_CLOSED: 'room:closed',
   HOST_SKIP_VOTE: 'host:skipVote',
   HOST_TRANSFERRED: 'host:transferred',
   HOST_DISCONNECTED_VOTER_PROMPT: 'host:disconnectedVoterPrompt',
@@ -76,6 +78,7 @@ export type HostExtendTimerError = 'NOT_HOST' | 'WRONG_PHASE';
 export type HostForceVoteError = 'NOT_HOST' | 'WRONG_PHASE';
 export type HostEndGameError = 'NOT_HOST' | 'WRONG_PHASE';
 export type HostPlayAgainError = 'NOT_HOST' | 'WRONG_PHASE';
+export type HostEndSessionError = 'NOT_HOST' | 'WRONG_PHASE';
 export type HostSkipVoteError = 'NOT_HOST' | 'WRONG_PHASE';
 export type RevealSubmitError = 'WRONG_PHASE' | 'WRONG_COUNT' | 'ALREADY_REVEALED' | 'ALREADY_SUBMITTED';
 export type VoteSubmitError = 'WRONG_PHASE' | 'SELF_VOTE' | 'ALREADY_VOTED' | 'INVALID_TARGET';
@@ -122,6 +125,7 @@ export type HostExtendTimerAck = { ok: true; newRemaining: number } | { ok: fals
 export type HostForceVoteAck = { ok: true } | { ok: false; error: HostForceVoteError };
 export type HostEndGameAck = { ok: true } | { ok: false; error: HostEndGameError };
 export type HostPlayAgainAck = { ok: true } | { ok: false; error: HostPlayAgainError };
+export type HostEndSessionAck = { ok: true } | { ok: false; error: HostEndSessionError };
 export type HostSkipVoteAck = { ok: true } | { ok: false; error: HostSkipVoteError };
 export type RevealSubmitAck = { ok: true } | { ok: false; error: RevealSubmitError };
 export type VoteSubmitAck = { ok: true } | { ok: false; error: VoteSubmitError };
@@ -227,6 +231,10 @@ export interface GameEndedPayload {
   survivors: PlayerView[]; // with full character cards
   eliminated: PlayerView[]; // in elimination order, with full cards
   outcomeSummary: string; // Ukrainian template text
+}
+
+export interface RoomClosedPayload {
+  message: string; // "Дякуємо за гру"
 }
 
 // ─── HTTP API types ──────────────────────────────────────────────────────────────

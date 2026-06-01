@@ -40,6 +40,7 @@ import type { ContentData } from '../../content/ContentData.js';
 import type { TimerService } from '../../services/TimerService.js';
 import type { GameStateMachine } from '../../services/GameStateMachine.js';
 import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
+import { emitAnalytics } from '../../services/Analytics.js';
 
 // Zod schema for room:join payload validation
 const roomJoinSchema = z.object({
@@ -207,6 +208,13 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
         const playerView = roomManager.toPlayerView(newPlayer, room, playerId);
         const joinedPayload: PlayerJoinedPayload = { player: playerView };
         socket.to(room.roomId).emit(EVENTS.PLAYER_JOINED, joinedPayload);
+
+        emitAnalytics({
+          type: 'player_joined',
+          roomCode: room.roomCode,
+          playerCount: room.players.size,
+          timestamp: now.toISOString(),
+        });
 
         return ack({
           ok: true,

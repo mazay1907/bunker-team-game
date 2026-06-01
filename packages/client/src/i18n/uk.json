@@ -100,7 +100,7 @@
   "host.disconnectedVoter.wait": "Зачекати ще хвилину",
   "host.disconnectedVoter.skip": "Пропустити голос",
 
-  "error.roomNotFound": "Кімнату не знайдено",
+  "error.roomNotFound": "Кімнату не знайдено або час очікування вичерпано.",
   "error.roomFull": "Кімната повна",
   "error.gameInProgress": "Гра вже триває",
   "error.invalidNickname": "Нікнейм повинен містити від 2 до 20 символів",
@@ -110,7 +110,7 @@
   "error.SESSION_TRANSFERRED": "Ця сесія відкрита в іншій вкладці. Ця вкладка вимкнена.",
   "error.createRoomFailed": "Не вдалося створити кімнату. Спробуйте ще раз.",
 
-  "error.ROOM_NOT_FOUND": "Кімнату не знайдено",
+  "error.ROOM_NOT_FOUND": "Кімнату не знайдено або час очікування вичерпано.",
   "error.ROOM_FULL": "Кімната повна (максимум 10 гравців)",
   "error.GAME_IN_PROGRESS": "Гра вже розпочалась. Ви можете приєднатися пізніше.",
   "error.INVALID_NICKNAME": "Нікнейм повинен містити від 2 до 20 символів",
@@ -143,5 +143,18 @@
   "howToPlay.voting.oneVotePerRound": "Один голос за раунд",
   "howToPlay.voting.tie": "Нічия → переголосування між зрівнялими → вирішальний голос ведучого",
   "howToPlay.character.title": "Ваш персонаж",
-  "howToPlay.character.body": "7 характеристик: стать/вік, професія, здоров'я, хобі, фобія, багаж, таємний факт. Свою картку бачите повністю; інші — лише те, що ви вже розкрили."
+  "howToPlay.character.body": "7 характеристик: стать/вік, професія, здоров'я, хобі, фобія, багаж, таємний факт. Свою картку бачите повністю; інші — лише те, що ви вже розкрили.",
+
+  "game.loading": "Завантаження…",
+  "lobby.connecting": "Підключаємось…",
+  "game.vote.voteCounted": "✓ Ваш голос зараховано.",
+  "game.spectatorWatching": "👁 Ви спостерігаєте",
+  "game.tiebreaker.revote": "Переголосування",
+  "game.tiebreaker.decidingVote": "Вирішальний голос",
+  "game.tiebreaker.votingBetweenTied": "Голосуйте між зрівнялими гравцями",
+  "game.tiebreaker.decidingLabel": "вирішує",
+  "game.tiebreaker.waitingDecision": "Очікуємо на рішення…",
+
+  "error.goHome": "На головну",
+  "lobby.selfBadge": "ви"
 }

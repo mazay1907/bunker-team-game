@@ -41,6 +41,7 @@ import type { GameStateMachine } from '../../services/GameStateMachine.js';
 import type { TimerService } from '../../services/TimerService.js';
 import type { CharacterDealer } from '../../services/CharacterDealer.js';
 import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
+import { emitAnalytics } from '../../services/Analytics.js';
 
 interface HostHandlerDeps {
   io: Server;
@@ -189,6 +190,15 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
 
       // Advance to R1_REVEAL
       gsm.transitionTo(room.roomId, 'R1_REVEAL');
+
+      emitAnalytics({
+        type: 'game_started',
+        roomCode: room.roomCode,
+        scenarioId: scenario.id,
+        playerCount: playerIds.length,
+        timestamp: now.toISOString(),
+      });
+
       return ack({ ok: true });
     },
   );
@@ -320,6 +330,14 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     };
 
     io.to(roomId).emit(EVENTS.GAME_ENDED, payload);
+
+    emitAnalytics({
+      type: 'game_completed',
+      roomCode: updated.roomCode,
+      reason,
+      survivorCount: survivors.length,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   // Expose helper so reveal/vote handlers can call it

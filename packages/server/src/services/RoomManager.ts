@@ -22,6 +22,7 @@ import type { ISessionStore } from '../store/SessionStore.js';
 import type { IReconnectStore } from '../store/ReconnectStore.js';
 import type { CreateRoomResponse } from '@bunker/shared';
 import type { ContentData } from '../content/ContentData.js';
+import { emitAnalytics } from './Analytics.js';
 
 // Maximum retries for room code generation on collision
 const MAX_CODE_RETRIES = 10;
@@ -107,6 +108,8 @@ export class RoomManager {
     this.roomStore.createRoom(room);
     this.sessionStore.set(sessionToken, playerId);
     this.reconnectStore.set(reconnectToken, playerId);
+
+    emitAnalytics({ type: 'room_created', roomCode, timestamp: now.toISOString() });
 
     return {
       roomId,

@@ -214,9 +214,9 @@ function LobbyPage(): JSX.Element {
             if (nickname) setOwnPlayer(ack.player.playerId, nickname);
             localStorage.setItem(RECONNECT_TOKEN_KEY, ack.reconnectToken);
           } else {
+            // Show error inline — do not navigate away so the user sees a clear error page
             const errKey = `error.${ack.error}` as Parameters<typeof t>[0];
             setLastError(t(errKey));
-            navigate('/');
           }
           resolve();
         });
@@ -267,13 +267,13 @@ function LobbyPage(): JSX.Element {
     return (
       <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
         <p className="font-oswald text-xl text-bunker-muted animate-pulse">
-          Підключаємось…
+          {t('lobby.connecting')}
         </p>
       </div>
     );
   }
 
-  if (lastError === 'SESSION_TRANSFERRED') {
+  if (lastError === 'SESSION_TRANSFERRED' || lastError === t('error.SESSION_TRANSFERRED')) {
     return (
       <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
         <div className="text-center p-8 max-w-sm">
@@ -291,10 +291,11 @@ function LobbyPage(): JSX.Element {
   if (lastError && !room) {
     return (
       <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
-        <div className="text-center p-8">
-          <p className="font-inter text-bunker-danger mb-6">{lastError}</p>
+        <div className="bg-bunker-surface border border-bunker-border rounded p-8 max-w-sm w-full mx-4 text-center">
+          <div className="text-4xl mb-4">⚠</div>
+          <p className="font-inter text-bunker-danger mb-6 text-lg">{lastError}</p>
           <button className={btnPrimary} onClick={() => navigate('/')}>
-            {t('end.createNew')}
+            {t('error.goHome')}
           </button>
         </div>
       </div>
@@ -396,7 +397,7 @@ function LobbyPage(): JSX.Element {
                 {/* Self badge */}
                 {player.playerId === ownPlayerId && !player.isHost && (
                   <span className="font-inter text-xs text-bunker-muted shrink-0">
-                    ви
+                    {t('lobby.selfBadge')}
                   </span>
                 )}
 
