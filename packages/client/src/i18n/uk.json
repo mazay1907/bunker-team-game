@@ -125,6 +125,9 @@
   "error.RATE_LIMIT_EXCEEDED": "Забагато запитів. Зачекайте хвилину.",
   "error.TOO_FEW_PLAYERS": "Потрібно мінімум 6 гравців",
   "error.TOO_MANY_PLAYERS": "Максимум 10 гравців",
+  "error.GAME_STARTED": "Гра вже розпочалась",
+  "error.PLAYER_NOT_FOUND": "Гравця не знайдено",
+  "error.INVALID_SCENARIO": "Недійсний сценарій",
 
   "howToPlay.title": "Як грати",
   "howToPlay.close": "Закрити",
@@ -156,5 +159,8 @@
   "game.tiebreaker.waitingDecision": "Очікуємо на рішення…",
 
   "error.goHome": "На головну",
-  "lobby.selfBadge": "ви"
+  "lobby.selfBadge": "ви",
+  "game.selfBadge": "ви",
+  "game.vote.button": "Голос",
+  "game.reconnectingBadge": "перепідключається…"
 }

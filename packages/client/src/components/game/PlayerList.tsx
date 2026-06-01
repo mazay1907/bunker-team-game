@@ -80,7 +80,7 @@ export function PlayerList({
               {/* Status badges */}
               {isReconnecting && (
                 <span className="font-inter text-xs text-bunker-muted animate-pulse shrink-0">
-                  {t('game.reconnecting', { nickname: '' }).replace('{{nickname}} ', '')}
+                  {t('game.reconnectingBadge')}
                 </span>
               )}
               {isEliminated && (
@@ -89,7 +89,7 @@ export function PlayerList({
                 </span>
               )}
               {isOwn && !isEliminated && (
-                <span className="font-inter text-xs text-bunker-muted/60 shrink-0">ви</span>
+                <span className="font-inter text-xs text-bunker-muted/60 shrink-0">{t('game.selfBadge')}</span>
               )}
 
               {/* Vote count badge */}
@@ -105,7 +105,7 @@ export function PlayerList({
                   className="h-8 px-3 rounded bg-bunker-hot/20 border border-bunker-hot/50 text-bunker-hot font-inter text-xs hover:bg-bunker-hot/30 transition-colors duration-150 shrink-0"
                   onClick={() => onVote(player.playerId)}
                 >
-                  {'Голос'}
+                  {t('game.vote.button')}
                 </button>
               )}
             </div>
