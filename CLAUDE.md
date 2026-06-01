@@ -8,7 +8,7 @@ Real-time browser-based multiplayer discussion/survival game for 6–10 players.
 
 | Layer | Choice |
 |---|---|
-| Frontend | React 18 + Vite + TypeScript + React Router v6 + Zustand |
+| Frontend | React 18 + Vite + TypeScript + React Router v6 + Zustand + Tailwind CSS v4 |
 | Backend | Node.js 22 LTS + Fastify + TypeScript + Socket.IO 4 |
 | Monorepo | pnpm workspaces (`packages/client`, `packages/server`, `packages/shared`) |
 | State | In-memory (no database in MVP) |
