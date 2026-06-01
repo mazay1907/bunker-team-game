@@ -70,7 +70,8 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
           const existingPlayerId = reconnectStore.get(reconnectToken);
           if (existingPlayerId) {
             const found = roomManager.findPlayerById(existingPlayerId);
-            if (found && found.player.status === 'RECONNECTING') {
+            // Also handle ACTIVE players with no socketId (host connecting after HTTP room creation)
+            if (found && (found.player.status === 'RECONNECTING' || (found.player.status === 'ACTIVE' && !found.player.socketId))) {
               const { room, player } = found;
               // Update socket ID and status
               roomStore.updateRoom(room.roomId, (r) => {
