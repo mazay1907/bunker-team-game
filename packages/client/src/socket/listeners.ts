@@ -27,11 +27,14 @@ import type {
   HostTransferredPayload,
   PlayerKickedPayload,
   HostDisconnectedVoterPromptPayload,
+  RoomClosedPayload,
 } from '@bunker/shared';
 
 interface ListenerOptions {
   /** Called when the local player is kicked from the room */
   onKicked?: () => void;
+  /** Called when the host ends the session and the room is closed */
+  onRoomClosed?: (message: string) => void;
 }
 
 export function registerSocketListeners(options?: ListenerOptions): () => void {
@@ -234,12 +237,19 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
     });
   };
 
+  // ── room:closed — host ended the session, everyone goes home ─────────────
+  const onRoomClosed = (payload: RoomClosedPayload): void => {
+    store.reset();
+    options?.onRoomClosed?.(payload.message);
+  };
+
   // ── connection state ──────────────────────────────────────────────────────
   const onConnect = (): void => store.setConnectionState('connected');
   const onDisconnect = (): void => store.setConnectionState('disconnected');
   const onConnectError = (): void => store.setConnectionState('error');
 
   // Register all listeners
+  socket.on(EVENTS.ROOM_CLOSED, onRoomClosed);
   socket.on(EVENTS.PLAYER_KICKED, onPlayerKicked);
   socket.on(EVENTS.HOST_DISCONNECTED_VOTER_PROMPT, onDisconnectedVoterPrompt);
   socket.on(EVENTS.ROOM_STATE, onRoomState);
@@ -263,6 +273,7 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
   socket.on('connect_error', onConnectError);
 
   return () => {
+    socket.off(EVENTS.ROOM_CLOSED, onRoomClosed);
     socket.off(EVENTS.PLAYER_KICKED, onPlayerKicked);
     socket.off(EVENTS.HOST_DISCONNECTED_VOTER_PROMPT, onDisconnectedVoterPrompt);
     socket.off(EVENTS.ROOM_STATE, onRoomState);

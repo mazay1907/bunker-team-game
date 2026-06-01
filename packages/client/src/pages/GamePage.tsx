@@ -21,6 +21,7 @@ import type {
   HostForceVoteAck,
   HostEndGameAck,
   HostSkipVoteAck,
+  HostEndSessionAck,
 } from '@bunker/shared';
 import { socket } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
@@ -151,7 +152,13 @@ function GameOverScreen(): JSX.Element {
   };
 
   const handleFinish = (): void => {
-    navigate('/');
+    if (isHost) {
+      // Host ends session: server cleans up room and emits room:closed to all
+      socket.emit(EVENTS.HOST_END_SESSION, (ack: HostEndSessionAck) => {
+        if (!ack.ok) console.error('endSession error:', ack.error);
+      });
+    }
+    navigate('/', { state: { message: t('end.thankYou') } });
   };
 
   return (
@@ -230,6 +237,10 @@ function GameOverScreen(): JSX.Element {
   );
 }
 
+// ── Mobile tab type ───────────────────────────────────────────────────────────
+
+type MobileTab = 'card' | 'players';
+
 // ── Main GamePage ─────────────────────────────────────────────────────────────
 
 function GamePage(): JSX.Element {
@@ -248,10 +259,12 @@ function GamePage(): JSX.Element {
   const [hasVoted, setHasVoted] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
+  const [mobileTab, setMobileTab] = useState<MobileTab>('card');
 
   useEffect(() => {
     const cleanup = registerSocketListeners({
       onKicked: () => navigate('/', { replace: true }),
+      onRoomClosed: () => navigate('/', { replace: true, state: { message: t('end.thankYou') } }),
     });
     return cleanup;
   }, [navigate]);
@@ -338,7 +351,7 @@ function GamePage(): JSX.Element {
   }, [setDisconnectedVoterPrompt]);
 
   const handleWaitForVoter = useCallback((): void => {
-    // Dismiss the modal — the server will re-prompt after 60 seconds if still disconnected
+    // Dismiss the modal — server re-prompts after 60 s if still disconnected
     setDisconnectedVoterPrompt(null);
   }, [setDisconnectedVoterPrompt]);
 
@@ -358,6 +371,115 @@ function GamePage(): JSX.Element {
       (p.status === 'ACTIVE' || p.status === 'RECONNECTING') &&
       !votes.some((v) => v.voterId === p.playerId),
   ).length;
+
+  // ── Reusable action panel (shared between desktop right-col and mobile sticky bar) ──
+  const actionPanel = !isSpectator && (
+    <>
+      {phase === 'REVEAL' && (
+        isRevealed ? (
+          <p className="font-inter text-sm text-bunker-muted text-center">
+            {t('game.reveal.alreadySubmitted')}
+            {revealWaitingFor > 0 && (
+              <span className="block mt-1 text-bunker-muted/60">
+                {t('game.reveal.waiting', { count: revealWaitingFor })}
+              </span>
+            )}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="font-inter text-sm text-bunker-muted">
+              {quota === 2 ? t('game.reveal.prompt.2') : t('game.reveal.prompt.1')}
+              {' '}({selectedCats.length}/{quota})
+            </p>
+            {submitError && (
+              <p className="font-inter text-xs text-bunker-danger">{submitError}</p>
+            )}
+            <button
+              className={btnPrimary}
+              disabled={selectedCats.length !== quota}
+              onClick={handleRevealSubmit}
+            >
+              {t('game.reveal.confirm')}
+            </button>
+          </div>
+        )
+      )}
+
+      {phase === 'VOTE' && (
+        <div className="flex flex-col gap-2">
+          <p className="font-inter text-sm text-bunker-muted">
+            {t('game.vote.prompt')}
+          </p>
+          {hasVoted && (
+            <p className="font-inter text-xs text-bunker-success">
+              {t('game.vote.voteCounted')}
+              {voteWaitingFor > 0 && (
+                <span className="text-bunker-muted"> {t('game.vote.waiting', { count: voteWaitingFor })}</span>
+              )}
+            </p>
+          )}
+          {!hasVoted && submitError && (
+            <p className="font-inter text-xs text-bunker-danger">{submitError}</p>
+          )}
+        </div>
+      )}
+    </>
+  );
+
+  // ── Left column content (my card) ─────────────────────────────────────────
+  const cardColumn = (
+    <div className="flex flex-col gap-4">
+      {scenario && <ScenarioCard scenario={scenario} />}
+      {isSpectator ? (
+        <div className="bg-bunker-surface border border-bunker-border rounded p-4 text-center">
+          <p className="font-oswald text-xl text-bunker-muted">
+            {t('game.eliminated.spectator')}
+          </p>
+          <p className="font-inter text-sm text-bunker-muted/60 mt-1">
+            {t('game.spectatorWatching')}
+          </p>
+        </div>
+      ) : ownCharacter ? (
+        <OwnCharacterCard
+          character={ownCharacter}
+          selectableCategories={phase === 'REVEAL' && !isRevealed ? selectableCats : undefined}
+          selectedCategories={selectedCats}
+          onToggle={phase === 'REVEAL' && !isRevealed ? toggleCat : undefined}
+        />
+      ) : null}
+    </div>
+  );
+
+  // ── Right column content (players + phase panel) ──────────────────────────
+  const playersColumn = (
+    <div className="flex flex-col gap-4">
+      {phase === 'DEBATE' && (
+        <DebateTimer
+          remaining={debateTimer}
+          isHost={isHost}
+          onExtend={handleExtendTimer}
+          onForceVote={handleForceVote}
+        />
+      )}
+
+      {/* Desktop action panel — hidden on mobile (shown in sticky bar instead) */}
+      {(phase === 'REVEAL' || phase === 'VOTE') && !isSpectator && (
+        <div className="hidden lg:block bg-bunker-surface border border-bunker-border rounded p-4">
+          {actionPanel}
+        </div>
+      )}
+
+      <PlayerList
+        players={players}
+        ownPlayerId={ownPlayerId}
+        voteTally={voteTally}
+        onVote={phase === 'VOTE' && !isSpectator && !hasVoted && !tiebreaker
+          ? handleVote : undefined}
+        hasVoted={hasVoted}
+        allowedVoteIds={tiebreaker?.tiedPlayerIds}
+      />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-bunker-bg text-bunker-text flex flex-col">
@@ -420,11 +542,11 @@ function GamePage(): JSX.Element {
         </div>
       )}
 
-      {/* Sticky header */}
+      {/* Sticky header — compact on mobile */}
       <header className="border-b border-bunker-border bg-bunker-surface/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="font-oswald font-bold text-xl text-bunker-hot">БУНКЕР</span>
+        <div className="max-w-5xl mx-auto px-3 md:px-4 py-2 md:py-3 flex items-center justify-between gap-2 md:gap-4">
+          <div className="flex items-center gap-2 md:gap-3">
+            <span className="font-oswald font-bold text-base md:text-xl text-bunker-hot">БУНКЕР</span>
             {round && (
               <span className="font-inter text-xs text-bunker-muted bg-bunker-bg px-2 py-1 rounded border border-bunker-border">
                 {t('game.round', { number: round })}
@@ -432,8 +554,8 @@ function GamePage(): JSX.Element {
             )}
           </div>
           <PhaseLabel phase={phase} />
-          <div className="flex items-center gap-3">
-            <span className="font-mono text-sm text-bunker-muted/60">{roomCode}</span>
+          <div className="flex items-center gap-2 md:gap-3">
+            <span className="hidden sm:inline font-mono text-sm text-bunker-muted/60">{roomCode}</span>
             <button
               className="p-1.5 text-bunker-muted hover:text-bunker-text transition-colors duration-150"
               onClick={() => setShowHowToPlay(true)}
@@ -443,7 +565,7 @@ function GamePage(): JSX.Element {
             </button>
             {isHost && (
               <button
-                className="h-8 px-3 rounded border border-bunker-danger/40 text-bunker-danger font-inter text-xs hover:bg-bunker-danger/10 transition-colors duration-150"
+                className="h-8 px-2 md:px-3 rounded border border-bunker-danger/40 text-bunker-danger font-inter text-xs hover:bg-bunker-danger/10 transition-colors duration-150"
                 onClick={() => setShowEndConfirm(true)}
               >
                 {t('host.endGame')}
@@ -451,110 +573,56 @@ function GamePage(): JSX.Element {
             )}
           </div>
         </div>
+
+        {/* Mobile tab switcher — below the top bar, hidden on lg+ */}
+        <div className="lg:hidden flex border-t border-bunker-border">
+          <button
+            className={`flex-1 py-2 font-oswald font-semibold text-sm uppercase tracking-[0.1em] transition-colors duration-150 ${
+              mobileTab === 'card'
+                ? 'text-bunker-text border-b-2 border-bunker-hot'
+                : 'text-bunker-muted border-b-2 border-transparent'
+            }`}
+            onClick={() => setMobileTab('card')}
+          >
+            {t('game.card.ownCard')}
+          </button>
+          <button
+            className={`flex-1 py-2 font-oswald font-semibold text-sm uppercase tracking-[0.1em] transition-colors duration-150 ${
+              mobileTab === 'players'
+                ? 'text-bunker-text border-b-2 border-bunker-hot'
+                : 'text-bunker-muted border-b-2 border-transparent'
+            }`}
+            onClick={() => setMobileTab('players')}
+          >
+            {t('game.players')}
+          </button>
+        </div>
       </header>
 
-      {/* Main layout: two-column on wide, stacked on narrow */}
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6 grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-6">
+      {/* Main layout: tabs on mobile, two-column on lg+ */}
+      {/* Add bottom padding on mobile when action bar is visible */}
+      <main className={`flex-1 max-w-5xl mx-auto w-full px-3 md:px-4 py-4 md:py-6 lg:grid lg:grid-cols-[1fr_1fr] lg:gap-6 ${
+        (phase === 'REVEAL' || phase === 'VOTE') && !isSpectator ? 'pb-24 lg:pb-6' : ''
+      }`}>
 
-        {/* Left column: scenario + own card */}
-        <div className="flex flex-col gap-4">
-          {scenario && <ScenarioCard scenario={scenario} />}
-
-          {isSpectator ? (
-            <div className="bg-bunker-surface border border-bunker-border rounded p-4 text-center">
-              <p className="font-oswald text-xl text-bunker-muted">
-                {t('game.eliminated.spectator')}
-              </p>
-              <p className="font-inter text-sm text-bunker-muted/60 mt-1">
-                {t('game.spectatorWatching')}
-              </p>
-            </div>
-          ) : ownCharacter ? (
-            <OwnCharacterCard
-              character={ownCharacter}
-              selectableCategories={phase === 'REVEAL' && !isRevealed ? selectableCats : undefined}
-              selectedCategories={selectedCats}
-              onToggle={phase === 'REVEAL' && !isRevealed ? toggleCat : undefined}
-            />
-          ) : null}
+        {/* Desktop: both columns always visible */}
+        <div className="hidden lg:contents">
+          {cardColumn}
+          {playersColumn}
         </div>
 
-        {/* Right column: players + phase panel */}
-        <div className="flex flex-col gap-4">
-
-          {/* Debate timer */}
-          {phase === 'DEBATE' && (
-            <DebateTimer
-              remaining={debateTimer}
-              isHost={isHost}
-              onExtend={handleExtendTimer}
-              onForceVote={handleForceVote}
-            />
-          )}
-
-          {/* Phase action panel */}
-          {phase === 'REVEAL' && !isSpectator && (
-            <div className="bg-bunker-surface border border-bunker-border rounded p-4 flex flex-col gap-3">
-              {isRevealed ? (
-                <p className="font-inter text-sm text-bunker-muted text-center">
-                  {t('game.reveal.alreadySubmitted')}
-                  {revealWaitingFor > 0 && (
-                    <span className="block mt-1 text-bunker-muted/60">
-                      {t('game.reveal.waiting', { count: revealWaitingFor })}
-                    </span>
-                  )}
-                </p>
-              ) : (
-                <>
-                  <p className="font-inter text-sm text-bunker-muted">
-                    {quota === 2 ? t('game.reveal.prompt.2') : t('game.reveal.prompt.1')}
-                    {' '}({selectedCats.length}/{quota})
-                  </p>
-                  {submitError && (
-                    <p className="font-inter text-xs text-bunker-danger">{submitError}</p>
-                  )}
-                  <button
-                    className={btnPrimary}
-                    disabled={selectedCats.length !== quota}
-                    onClick={handleRevealSubmit}
-                  >
-                    {t('game.reveal.confirm')}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
-          {phase === 'VOTE' && !isSpectator && (
-            <div className="bg-bunker-surface border border-bunker-border rounded p-4">
-              <p className="font-inter text-sm text-bunker-muted mb-2">
-                {t('game.vote.prompt')}
-              </p>
-              {hasVoted ? (
-                <p className="font-inter text-xs text-bunker-success">
-                  {t('game.vote.voteCounted')}
-                  {voteWaitingFor > 0 && (
-                    <span className="text-bunker-muted"> {t('game.vote.waiting', { count: voteWaitingFor })}</span>
-                  )}
-                </p>
-              ) : submitError ? (
-                <p className="font-inter text-xs text-bunker-danger">{submitError}</p>
-              ) : null}
-            </div>
-          )}
-
-          {/* Player list */}
-          <PlayerList
-            players={players}
-            ownPlayerId={ownPlayerId}
-            voteTally={voteTally}
-            onVote={phase === 'VOTE' && !isSpectator && !hasVoted && !tiebreaker
-              ? handleVote : undefined}
-            hasVoted={hasVoted}
-            allowedVoteIds={tiebreaker?.tiedPlayerIds}
-          />
+        {/* Mobile: show active tab only */}
+        <div className="lg:hidden">
+          {mobileTab === 'card' ? cardColumn : playersColumn}
         </div>
       </main>
+
+      {/* Mobile sticky action bar — only shown for REVEAL / VOTE phases, hidden on lg+ */}
+      {(phase === 'REVEAL' || phase === 'VOTE') && !isSpectator && (
+        <div className="fixed bottom-0 left-0 right-0 bg-bunker-surface border-t border-bunker-border p-3 lg:hidden z-20">
+          {actionPanel}
+        </div>
+      )}
     </div>
   );
 }

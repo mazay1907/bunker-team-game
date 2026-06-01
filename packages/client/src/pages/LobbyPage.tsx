@@ -314,13 +314,13 @@ function LobbyPage(): JSX.Element {
 
       {/* Header */}
       <header className="border-b border-bunker-border bg-bunker-surface/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <span className="font-oswald font-bold text-xl text-bunker-hot uppercase tracking-wider">
+        <div className="max-w-2xl mx-auto px-3 md:px-4 py-2 md:py-3 flex items-center justify-between gap-2 md:gap-4">
+          <span className="font-oswald font-bold text-lg md:text-xl text-bunker-hot uppercase tracking-wider shrink-0">
             БУНКЕР
           </span>
-          <div className="flex items-center gap-2">
-            <span className="font-inter text-sm text-bunker-muted">{t('lobby.roomCode')}:</span>
-            <span className="font-mono font-bold text-lg text-bunker-text tracking-[0.2em]">
+          <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
+            <span className="hidden sm:inline font-inter text-sm text-bunker-muted shrink-0">{t('lobby.roomCode')}:</span>
+            <span className="font-mono font-bold text-base md:text-lg text-bunker-text tracking-[0.2em] shrink-0">
               {roomCode}
             </span>
             <button
@@ -329,8 +329,8 @@ function LobbyPage(): JSX.Element {
               title={t('lobby.copyLink')}
             >
               {linkCopied
-                ? <><Check size={14} /><span>{t('lobby.linkCopied')}</span></>
-                : <><Copy size={14} /><span>{t('lobby.copyLink')}</span></>
+                ? <><Check size={14} /><span className="hidden sm:inline">{t('lobby.linkCopied')}</span></>
+                : <><Copy size={14} /><span className="hidden sm:inline">{t('lobby.copyLink')}</span></>
               }
             </button>
             <button
@@ -344,8 +344,8 @@ function LobbyPage(): JSX.Element {
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8 flex flex-col gap-8">
+      {/* Main content — single column on mobile, max-width on wider screens */}
+      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 md:py-8 flex flex-col gap-6 md:gap-8">
 
         {/* Title */}
         <div>

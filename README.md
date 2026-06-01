@@ -1,35 +1,43 @@
-# Бункер — командна гра
+# Бункер — командна гра виживання
 
-Онлайн-версія дискусійної гри «Бункер» для команд.
+A real-time multiplayer survival discussion game for teams of 6–10 players. Each player gets a secret character card with 7 traits. Over 3 rounds they reveal traits, debate on video call, and vote one player out. The remaining players claim a spot in the bunker.
+
+## How to Play
+
+1. **Create a room** — one player opens the app and creates a room, getting a 6-character room code
+2. **Share the link** — share the room link with teammates so they can join
+3. **Play** — the host starts the game; each round players reveal traits, discuss on Zoom/Meet, and vote someone out
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org) v22 LTS or newer
 - [pnpm](https://pnpm.io) v9.x (`npm install -g pnpm@9`)
-- [Git](https://git-scm.com)
 
-Docker is only required for the containerised deployment path, not for local development.
+Docker is only required for the containerised deployment path.
 
 ## Quick Start (Local Development)
 
 ```bash
-git clone https://github.com/mazay1907/bunker-team-game.git
-cd bunker-team-game
 pnpm install
 pnpm dev
 ```
+
+Open `http://localhost:5173` in your browser.
 
 This starts:
 - **Fastify server** on `http://localhost:3000` (REST API + Socket.IO)
 - **Vite dev server** on `http://localhost:5173` (React app with HMR)
 
-Open `http://localhost:5173` in your browser.
-
-## Production Build (Local Preview)
+## Run Tests
 
 ```bash
-pnpm build    # builds all packages
-pnpm start    # serves at http://localhost:3000
+pnpm --dir packages/server test
+```
+
+Or with watch mode:
+
+```bash
+pnpm --dir packages/server test:watch
 ```
 
 ## Docker Deployment
@@ -38,45 +46,26 @@ pnpm start    # serves at http://localhost:3000
 docker compose up --build
 ```
 
-The app will be accessible at `http://localhost:3000`.
-
-To restart after editing content files (no rebuild needed):
-
-```bash
-docker compose restart
-```
-
-## Run Tests
-
-```bash
-pnpm test
-```
-
-## Lint
-
-```bash
-pnpm lint
-```
+Open `http://localhost:3000`. No separate dev server — the container serves the built frontend.
 
 ## Environment Variables
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `3000` | Fastify server port |
-| `NODE_ENV` | `development` | Environment mode |
-| `ALLOWED_ORIGIN` | `http://localhost:3000` | CORS allowed origin (set in production) |
+| `PORT` | `3000` | Fastify server listen port |
+| `NODE_ENV` | `development` | Set to `production` on any hosted environment |
 
-No `.env` file is required for local development.
+No `.env` file required for local development — defaults work out of the box.
 
 ## Project Structure
 
 ```
 bunker-team-game/
   packages/
-    client/      # React 18 frontend (Vite + TypeScript)
-    server/      # Fastify 4 + Socket.IO 4 backend
-    shared/      # Shared TypeScript types
+    client/      # React 18 + Vite + TypeScript frontend
+    server/      # Fastify + Socket.IO backend
+    shared/      # Shared TypeScript types (imported by both sides)
   content/
     scenarios/   # JSON apocalypse scenario files
-    traits/      # JSON character trait pool files
+    traits/      # JSON character trait pool files (7 categories)
 ```

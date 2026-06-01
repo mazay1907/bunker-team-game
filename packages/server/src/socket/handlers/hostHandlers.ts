@@ -27,10 +27,12 @@ import type {
   HostForceVoteAck,
   HostEndGameAck,
   HostPlayAgainAck,
+  HostEndSessionAck,
   PlayerKickedPayload,
   ScenariosListPayload,
   GameStartedPayload,
   GameEndedPayload,
+  RoomClosedPayload,
   PlayerView,
   Game,
 } from '@bunker/shared';
@@ -42,6 +44,7 @@ import type { TimerService } from '../../services/TimerService.js';
 import type { CharacterDealer } from '../../services/CharacterDealer.js';
 import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 import { emitAnalytics } from '../../services/Analytics.js';
+import { startRevealPhaseTimer } from './revealHandlers.js';
 
 interface HostHandlerDeps {
   io: Server;
@@ -188,8 +191,9 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
         io.to(player.socketId).emit(EVENTS.GAME_STARTED, payload);
       }
 
-      // Advance to R1_REVEAL
+      // Advance to R1_REVEAL and start the reveal auto-select timeout
       gsm.transitionTo(room.roomId, 'R1_REVEAL');
+      startRevealPhaseTimer(room.roomId, 1, { io, roomStore, roomManager, gsm, timerService });
 
       emitAnalytics({
         type: 'game_started',
@@ -280,6 +284,27 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
       scenarios: [...contentData.getAvailableScenarios()],
     };
     io.to(updatedRoom.roomId).emit(EVENTS.SCENARIOS_LIST, scenariosPayload);
+
+    return ack({ ok: true });
+  });
+
+  // ── host:endSession ───────────────────────────────────────────────────────────
+  socket.on(EVENTS.HOST_END_SESSION, (ack: (r: HostEndSessionAck) => void) => {
+    const found = getHostRoom();
+    if (!found) return ack({ ok: false, error: 'NOT_HOST' });
+    const { room } = found;
+
+    if (room.state !== 'ENDED') return ack({ ok: false, error: 'WRONG_PHASE' });
+
+    timerService.clearAll(room.roomId);
+
+    const closedPayload: RoomClosedPayload = { message: 'Дякуємо за гру' };
+    io.to(room.roomId).emit(EVENTS.ROOM_CLOSED, closedPayload);
+
+    // Disconnect all sockets from the Socket.IO room
+    io.in(room.roomId).socketsLeave(room.roomId);
+
+    roomStore.deleteRoom(room.roomId);
 
     return ack({ ok: true });
   });

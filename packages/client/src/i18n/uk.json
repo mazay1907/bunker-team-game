@@ -63,7 +63,8 @@
 
   "game.card.revealed": "розкрито",
   "game.card.hidden": "???",
-  "game.card.ownCard": "Ваша картка",
+  "game.card.ownCard": "МОЯ КАРТКА",
+  "game.players": "ГРАВЦІ",
 
   "trait.category.GENDER_AGE": "Стать / вік",
   "trait.category.PROFESSION": "Професія",

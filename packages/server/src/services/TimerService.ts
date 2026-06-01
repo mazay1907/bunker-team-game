@@ -28,6 +28,12 @@ export class TimerService {
   private readonly timers = new Map<string, TimerEntry>();
 
   /**
+   * One-shot reveal timers: key = roomId.
+   * Fires onExpire after REVEAL_TIMEOUT_SECONDS if not all players submit in time.
+   */
+  private readonly revealTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /**
    * One-shot reconnect hold timers: key = `${roomId}:${playerId}`.
    * Fires onExpire after RECONNECT_HOLD_SECONDS if player doesn't reconnect.
    */
@@ -105,6 +111,28 @@ export class TimerService {
   }
 
   /**
+   * Starts a one-shot reveal timeout for a room.
+   * Replaces any existing reveal timer for the room.
+   * onExpire fires after `seconds` if not cancelled early (e.g. all players submitted).
+   */
+  startRevealTimer(roomId: string, seconds: number, onExpire: () => void): void {
+    this.clearRevealTimer(roomId);
+    const handle = setTimeout(onExpire, seconds * 1000);
+    this.revealTimers.set(roomId, handle);
+  }
+
+  /**
+   * Cancels the reveal timer for a room (all players submitted before timeout).
+   */
+  clearRevealTimer(roomId: string): void {
+    const handle = this.revealTimers.get(roomId);
+    if (handle !== undefined) {
+      clearTimeout(handle);
+      this.revealTimers.delete(roomId);
+    }
+  }
+
+  /**
    * Starts a one-shot reconnect hold timer for a specific player.
    * onExpire fires after `seconds` if not cancelled by clearReconnectTimer.
    */
@@ -153,6 +181,7 @@ export class TimerService {
    */
   clearAll(roomId: string): void {
     this.cancelTimer(roomId);
+    this.clearRevealTimer(roomId);
     this.cancelHostTransferTimer(roomId);
     // Clear all reconnect timers for this room
     for (const key of this.reconnectTimers.keys()) {

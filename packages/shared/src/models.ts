@@ -191,6 +191,7 @@ export const MAX_PLAYERS = 10;
 export const TOTAL_ROUNDS = 3;
 export const REVEAL_QUOTAS: Record<1 | 2 | 3, 2 | 1> = { 1: 2, 2: 2, 3: 1 };
 export const DEBATE_TIMER_SECONDS = 300; // 5 minutes
+export const REVEAL_TIMEOUT_SECONDS = 120; // 2 minutes — auto-selects unrevealed traits
 export const RECONNECT_HOLD_SECONDS = 300; // 5 minutes
 export const HOST_TRANSFER_SECONDS = 60; // 1 minute
 export const ROOM_CODE_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no O, I, 0, 1

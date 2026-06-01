@@ -18,6 +18,7 @@ import {
   TRAIT_CATEGORIES,
   DEBATE_TIMER_SECONDS,
   REVEAL_QUOTAS,
+  REVEAL_TIMEOUT_SECONDS,
 } from '@bunker/shared';
 import type {
   RevealSubmitPayload,
@@ -30,6 +31,7 @@ import type { IRoomStore } from '../../store/RoomStore.js';
 import type { RoomManager } from '../../services/RoomManager.js';
 import type { GameStateMachine } from '../../services/GameStateMachine.js';
 import type { TimerService } from '../../services/TimerService.js';
+import { pickRandomUnrevealed, getPlayersWhoHaveNotSubmitted } from '../../services/RevealAutoSelect.js';
 
 interface RevealHandlerDeps {
   io: Server;
@@ -95,34 +97,7 @@ export function registerRevealHandlers(socket: Socket, deps: RevealHandlerDeps):
       }
 
       const now = new Date();
-      const submission: RevealSubmission = {
-        playerId,
-        revealedCategories: categories,
-        submittedAt: now,
-      };
-
-      // Update player character + room state
-      roomStore.updateRoom(room.roomId, (r) => {
-        const p = r.players.get(playerId);
-        if (!p?.character) return r;
-
-        const updatedTraits = { ...p.character.traits };
-        for (const cat of categories) {
-          updatedTraits[cat] = { ...updatedTraits[cat], isRevealed: true };
-        }
-
-        r.players.set(playerId, {
-          ...p,
-          character: { ...p.character, traits: updatedTraits },
-          revealHistory: [...p.revealHistory, submission],
-        });
-
-        const roundData = r.game?.rounds[room.currentRound! - 1];
-        if (roundData) roundData.revealSubmissions.set(playerId, submission);
-
-        r.lastActivityAt = now;
-        return r;
-      });
+      persistReveal(room.roomId, playerId, categories, room.currentRound, now);
 
       // Count remaining players who haven't submitted
       const updatedRoom = roomStore.getRoom(room.roomId)!;
@@ -148,26 +123,178 @@ export function registerRevealHandlers(socket: Socket, deps: RevealHandlerDeps):
 
       ack({ ok: true });
 
-      // Advance to DEBATE when everyone has submitted
-      if (waitingFor === 0) {
-        const debateState = room.currentRound === 1
-          ? 'R1_DEBATE'
-          : room.currentRound === 2
-            ? 'R2_DEBATE'
-            : 'R3_DEBATE';
-        gsm.transitionTo(room.roomId, debateState);
-
-        timerService.startDebateTimer(room.roomId, DEBATE_TIMER_SECONDS, () => {
-          const r = roomStore.getRoom(room.roomId);
-          if (!r || r.currentPhase !== 'DEBATE') return;
-          const voteState = room.currentRound === 1
-            ? 'R1_VOTE'
-            : room.currentRound === 2
-              ? 'R2_VOTE'
-              : 'R3_VOTE';
-          gsm.transitionTo(room.roomId, voteState);
-        });
-      }
+      advanceIfAllSubmitted(room.roomId, room.currentRound, waitingFor);
     },
   );
+
+  /**
+   * Persists a reveal submission for one player.
+   * Marks the selected trait slots as revealed in the player's character card.
+   */
+  function persistReveal(
+    roomId: string,
+    playerId: string,
+    categories: TraitCategory[],
+    roundNumber: 1 | 2 | 3,
+    now: Date,
+  ): void {
+    const submission: RevealSubmission = {
+      playerId,
+      revealedCategories: categories,
+      submittedAt: now,
+    };
+    roomStore.updateRoom(roomId, (r) => {
+      const p = r.players.get(playerId);
+      if (!p?.character) return r;
+      const updatedTraits = { ...p.character.traits };
+      for (const cat of categories) {
+        updatedTraits[cat] = { ...updatedTraits[cat], isRevealed: true };
+      }
+      r.players.set(playerId, {
+        ...p,
+        character: { ...p.character, traits: updatedTraits },
+        revealHistory: [...p.revealHistory, submission],
+      });
+      const roundData = r.game?.rounds[roundNumber - 1];
+      if (roundData) roundData.revealSubmissions.set(playerId, submission);
+      r.lastActivityAt = now;
+      return r;
+    });
+  }
+
+  /**
+   * Advances to DEBATE when all active players have submitted.
+   * Clears the reveal timer — it's no longer needed.
+   */
+  function advanceIfAllSubmitted(
+    roomId: string,
+    roundNumber: 1 | 2 | 3,
+    waitingFor: number,
+  ): void {
+    if (waitingFor !== 0) return;
+
+    timerService.clearRevealTimer(roomId);
+
+    const debateState = roundNumber === 1
+      ? 'R1_DEBATE'
+      : roundNumber === 2
+        ? 'R2_DEBATE'
+        : 'R3_DEBATE';
+    gsm.transitionTo(roomId, debateState);
+
+    timerService.startDebateTimer(roomId, DEBATE_TIMER_SECONDS, () => {
+      const r = roomStore.getRoom(roomId);
+      if (!r || r.currentPhase !== 'DEBATE') return;
+      const voteState = roundNumber === 1
+        ? 'R1_VOTE'
+        : roundNumber === 2
+          ? 'R2_VOTE'
+          : 'R3_VOTE';
+      gsm.transitionTo(roomId, voteState);
+    });
+  }
+}
+
+/**
+ * Starts the reveal timeout for a room entering a REVEAL phase.
+ * On timeout: auto-submits random unrevealed categories for each player
+ * who has not submitted yet, then advances to DEBATE.
+ *
+ * Called externally from hostHandlers (R1_REVEAL) and voteHandlers (R2/R3_REVEAL).
+ */
+export function startRevealPhaseTimer(
+  roomId: string,
+  roundNumber: 1 | 2 | 3,
+  deps: RevealHandlerDeps,
+): void {
+  const { io, roomStore, gsm, timerService } = deps;
+
+  timerService.startRevealTimer(roomId, REVEAL_TIMEOUT_SECONDS, () => {
+    autoSubmitPendingReveals(roomId, roundNumber, { io, roomStore, gsm, timerService });
+  });
+}
+
+/**
+ * Auto-submits random reveal selections for all players who haven't submitted yet.
+ * Emits reveal:update for each, then advances to DEBATE.
+ * Idempotent — if room is no longer in REVEAL phase, exits early.
+ */
+function autoSubmitPendingReveals(
+  roomId: string,
+  roundNumber: 1 | 2 | 3,
+  deps: Pick<RevealHandlerDeps, 'io' | 'roomStore' | 'gsm' | 'timerService'>,
+): void {
+  const { io, roomStore, gsm, timerService } = deps;
+  const room = roomStore.getRoom(roomId);
+  if (!room || room.currentPhase !== 'REVEAL' || room.currentRound !== roundNumber) return;
+
+  const round = room.game?.rounds[roundNumber - 1];
+  if (!round) return;
+
+  const quota = REVEAL_QUOTAS[roundNumber];
+  const allPlayers = [...room.players.values()];
+  const pending = getPlayersWhoHaveNotSubmitted(
+    allPlayers,
+    new Set(round.revealSubmissions.keys()),
+  );
+
+  const now = new Date();
+
+  for (const player of pending) {
+    const categories = pickRandomUnrevealed(player, quota);
+    if (categories.length === 0) continue;
+
+    // Persist the auto-selected reveal
+    roomStore.updateRoom(roomId, (r) => {
+      const p = r.players.get(player.playerId);
+      if (!p?.character) return r;
+      const updatedTraits = { ...p.character.traits };
+      for (const cat of categories) {
+        updatedTraits[cat] = { ...updatedTraits[cat], isRevealed: true };
+      }
+      const submission: RevealSubmission = {
+        playerId: player.playerId,
+        revealedCategories: categories,
+        submittedAt: now,
+      };
+      r.players.set(player.playerId, {
+        ...p,
+        character: { ...p.character, traits: updatedTraits },
+        revealHistory: [...p.revealHistory, submission],
+      });
+      const rd = r.game?.rounds[roundNumber - 1];
+      if (rd) rd.revealSubmissions.set(player.playerId, submission);
+      r.lastActivityAt = now;
+      return r;
+    });
+
+    // Broadcast the auto-reveal so all clients see updated traits
+    const updatedRoom = roomStore.getRoom(roomId)!;
+    const updatedPlayer = updatedRoom.players.get(player.playerId);
+    const revealedTraits = Object.values(updatedPlayer?.character?.traits ?? {}).filter(
+      (t) => categories.includes(t.category),
+    );
+
+    const updatePayload: RevealUpdatePayload = {
+      playerId: player.playerId,
+      revealedTraits,
+      waitingFor: 0, // all have now submitted (or will after loop)
+    };
+    io.to(roomId).emit(EVENTS.REVEAL_UPDATE, updatePayload);
+  }
+
+  // Advance to DEBATE now that all players are submitted
+  const debateState = roundNumber === 1
+    ? 'R1_DEBATE'
+    : roundNumber === 2
+      ? 'R2_DEBATE'
+      : 'R3_DEBATE';
+  gsm.transitionTo(roomId, debateState);
+
+  timerService.startDebateTimer(roomId, DEBATE_TIMER_SECONDS, () => {
+    const r = roomStore.getRoom(roomId);
+    if (!r || r.currentPhase !== 'DEBATE') return;
+    const voteState = roundNumber === 1 ? 'R1_VOTE' : roundNumber === 2 ? 'R2_VOTE' : 'R3_VOTE';
+    gsm.transitionTo(roomId, voteState);
+  });
 }

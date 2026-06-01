@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { t } from '../i18n/t.js';
 import { socket, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY, claimSession } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
@@ -27,7 +27,10 @@ const secondaryBtnClass =
 
 function HomePage(): JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setOwnPlayer, setRoom, setPlayers } = useGameStore();
+
+  const locationMessage = (location.state as { message?: string } | null)?.message ?? null;
 
   const [createNickname, setCreateNickname] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
@@ -220,6 +223,13 @@ function HomePage(): JSX.Element {
             <span className="font-inter text-sm text-bunker-danger">{joinError}</span>
           )}
         </form>
+
+        {/* Post-game thank-you message */}
+        {locationMessage && (
+          <p className="text-center font-inter text-sm text-bunker-success">
+            {locationMessage}
+          </p>
+        )}
 
         {/* Meta */}
         <p className="text-center font-inter text-xs text-bunker-muted/60 uppercase tracking-[0.08em] mt-2">
