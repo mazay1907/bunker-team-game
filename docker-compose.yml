@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount content directory so JSON edits don't require a full image rebuild
+      - ./content:/app/content
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Set ALLOWED_ORIGIN in production to restrict CORS
+      # - ALLOWED_ORIGIN=https://your-domain.com

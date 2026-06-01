@@ -1,0 +1,29 @@
+{
+  "name": "bunker-team-game",
+  "version": "0.1.0",
+  "description": "Online Bunker discussion game for Ukrainian teams",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev": "concurrently --names \"server,client\" --prefix-colors \"yellow,cyan\" \"pnpm --filter @bunker/server dev\" \"pnpm --filter @bunker/client dev\"",
+    "build": "pnpm --filter @bunker/shared build && pnpm --filter @bunker/server build && pnpm --filter @bunker/client build",
+    "start": "node packages/server/dist/index.js",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint packages --ext .ts,.tsx --max-warnings 0",
+    "lint:fix": "eslint packages --ext .ts,.tsx --fix",
+    "format": "prettier --write 'packages/**/*.{ts,tsx,json}'",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.2",
+    "typescript": "^5.4.5"
+  }
+}
