@@ -1,1 +1,16 @@
 @import "tailwindcss";
+
+@theme {
+  --color-bunker-bg:      #0D0B08;
+  --color-bunker-surface: #1A1610;
+  --color-bunker-border:  #2E2416;
+  --color-bunker-hot:     #E8510A;
+  --color-bunker-glow:    #FF7A3C;
+  --color-bunker-text:    #F5E6CC;
+  --color-bunker-muted:   #8C7A60;
+  --color-bunker-danger:  #C0392B;
+
+  --font-oswald: "Oswald", sans-serif;
+  --font-inter:  "Inter", sans-serif;
+  --font-mono:   "Roboto Mono", monospace;
+}

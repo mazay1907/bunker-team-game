@@ -1,14 +1,17 @@
 {
   "app.title": "Бункер — командна гра",
 
+  "home.subtitle": "виживання починається тут",
   "home.createRoom": "Створити кімнату",
   "home.joinRoom": "Приєднатися за кодом",
+  "home.orJoin": "або приєднатись",
   "home.nicknameLabel": "Ваш нікнейм",
   "home.nicknamePlaceholder": "Введіть нікнейм",
   "home.roomCodeLabel": "Код кімнати",
-  "home.roomCodePlaceholder": "Наприклад: BNK7R2",
+  "home.roomCodePlaceholder": "Код кімнати",
   "home.createButton": "Створити кімнату",
-  "home.joinButton": "Приєднатися",
+  "home.joinButton": "Увійти",
+  "home.meta": "6–10 гравців · 3 раунди · живе голосування",
 
   "lobby.title": "Очікуємо гравців",
   "lobby.roomCode": "Код кімнати",
