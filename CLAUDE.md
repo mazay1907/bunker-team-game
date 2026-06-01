@@ -8,7 +8,7 @@ Real-time browser-based multiplayer discussion/survival game for 6–10 players.
 
 | Layer | Choice |
 |---|---|
-| Frontend | React 18 + Vite + TypeScript + React Router v6 + Zustand + Tailwind CSS v4 |
+| Frontend | React 18 + Vite + TypeScript + React Router v6 + Zustand + Tailwind CSS v4 + Lucide React |
 | Backend | Node.js 22 LTS + Fastify + TypeScript + Socket.IO 4 |
 | Monorepo | pnpm workspaces (`packages/client`, `packages/server`, `packages/shared`) |
 | State | In-memory (no database in MVP) |
@@ -164,7 +164,9 @@ Example: `feat(server): implement VoteEngine with tie resolution`
 
 **Next step:** Sprint 1 — `GameStateMachine`, `VoteEngine`, `TimerService`, reveal/debate/vote phases (WBS tasks in `Reqs/MVP_BACKLOG.md` sections 3–7).
 
-**Source of truth priority:** `GAME_RULES.md` > `Architecture/` > `Reqs/` > this file.
+**Source of truth priority:** `GAME_RULES.md` > `Architecture/` > `Reqs/` > `Design/` > this file.
+
+**Design:** before implementing any page/component, read `Design/DESIGN_SYSTEM.md` (tokens, typography, buttons, cards, animations) and the corresponding `Design/*_PAGE_FIGMA_BRIEF.md`. Never use raw hex or pixel values — only the `bunker-*` Tailwind tokens defined there.
 
 ---
 
@@ -184,3 +186,7 @@ Example: `feat(server): implement VoteEngine with tie resolution`
 | `Architecture/API_DESIGN.md` | SA | All Socket.IO events + HTTP endpoints |
 | `Architecture/CODE_STANDARDS.md` | SA | Conventions, folder structure, testing requirements |
 | `Architecture/DEPLOYMENT.md` | SA | Local dev + Docker + hosting platform instructions |
+| `Design/DESIGN_SYSTEM.md` | Design | **Read first** — color tokens, typography, buttons, inputs, cards, animations |
+| `Design/HOME_PAGE_FIGMA_BRIEF.md` | Design | HomePage layout + component specs (already implemented) |
+| `Design/LOBBY_PAGE_FIGMA_BRIEF.md` | Design | LobbyPage layout + component specs |
+| `Design/GAME_PAGE_FIGMA_BRIEF.md` | Design | GamePage layout, all phases (reveal/discuss/vote), game-over screen, tie-break modal |

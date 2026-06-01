@@ -9,8 +9,16 @@
   --color-bunker-text:    #F5E6CC;
   --color-bunker-muted:   #8C7A60;
   --color-bunker-danger:  #C0392B;
+  --color-bunker-success: #27AE60;
 
   --font-oswald: "Oswald", sans-serif;
   --font-inter:  "Inter", sans-serif;
   --font-mono:   "Roboto Mono", monospace;
+
+  --animate-fade-in: fade-in 300ms ease-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
 }
