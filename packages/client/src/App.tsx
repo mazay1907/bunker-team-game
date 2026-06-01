@@ -1,8 +1,9 @@
 /**
  * App root — React Router v6 with createBrowserRouter.
  * Routes:
- *   /           → HomePage
- *   /r/:roomCode → LobbyPage (or GamePage once game starts)
+ *   /               → HomePage
+ *   /r/:roomCode    → LobbyPage (lobby + scenario picker)
+ *   /game/:roomCode → GamePage (all in-game phases)
  */
 
 import { createBrowserRouter, RouterProvider, Outlet } from 'react-router-dom';
@@ -15,7 +16,13 @@ const GamePage = lazy(() => import('./pages/GamePage.js'));
 function RootLayout(): JSX.Element {
   return (
     <div className="app">
-      <Suspense fallback={<div className="loading">…</div>}>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
+            <span className="font-oswald text-xl text-bunker-muted animate-pulse">…</span>
+          </div>
+        }
+      >
         <Outlet />
       </Suspense>
     </div>

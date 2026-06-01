@@ -27,6 +27,7 @@ import type { IRoomStore } from '../../store/RoomStore.js';
 import type { ISessionStore } from '../../store/SessionStore.js';
 import type { IReconnectStore } from '../../store/ReconnectStore.js';
 import { RoomManager } from '../../services/RoomManager.js';
+import type { ContentData } from '../../content/ContentData.js';
 
 // Zod schema for room:join payload validation
 const roomJoinSchema = z.object({
@@ -41,10 +42,11 @@ interface HandlerDeps {
   sessionStore: ISessionStore;
   reconnectStore: IReconnectStore;
   roomManager: RoomManager;
+  contentData?: ContentData;
 }
 
 export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
-  const { io, roomStore, sessionStore, reconnectStore, roomManager } = deps;
+  const { io, roomStore, sessionStore, reconnectStore, roomManager, contentData } = deps;
 
   // ── room:join ────────────────────────────────────────────────────────────────
   socket.on(
@@ -90,10 +92,12 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
               // Send full state to reconnecting player
               const updatedRoom = roomStore.getRoom(room.roomId);
               if (updatedRoom) {
+                // Re-read player with updated character from updatedRoom
+                const updatedPlayer = updatedRoom.players.get(existingPlayerId);
                 const statePayload: RoomStatePayload = {
-                  room: roomManager.toRoomView(updatedRoom),
+                  room: roomManager.toRoomView(updatedRoom, contentData),
                   players: roomManager.getPlayerViews(updatedRoom, existingPlayerId),
-                  ownCharacter: player.character,
+                  ownCharacter: updatedPlayer?.character ?? null,
                   game: null, // GameView constructed elsewhere
                 };
                 socket.emit(EVENTS.ROOM_STATE, statePayload);
@@ -107,7 +111,7 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
               return ack({
                 ok: true,
                 player: roomManager.toPlayerView(player, room, existingPlayerId),
-                room: roomManager.toRoomView(room),
+                room: roomManager.toRoomView(room, contentData),
                 reconnectToken,
               });
             }

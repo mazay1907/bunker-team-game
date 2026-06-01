@@ -14,13 +14,17 @@ import type {
   PlayerJoinedPayload,
   PlayerLeftPayload,
   PlayerReconnectingPayload,
-  PlayerReconnectedPayload,
   PhaseChangedPayload,
   RevealUpdatePayload,
   VoteUpdatePayload,
   PlayerEliminatedPayload,
   GameEndedPayload,
   GameStartedPayload,
+  ScenariosListPayload,
+  TimerTickPayload,
+  TimerExtendedPayload,
+  VoteTiebreakerPayload,
+  HostTransferredPayload,
 } from '@bunker/shared';
 
 export function registerSocketListeners(): () => void {
@@ -32,6 +36,7 @@ export function registerSocketListeners(): () => void {
     store.setPlayers(payload.players);
     store.setOwnCharacter(payload.ownCharacter);
     if (payload.game) store.setGame(payload.game);
+    store.resetRound();
   };
 
   // ── player:joined — another player joined the lobby ─────────────────────
@@ -41,18 +46,25 @@ export function registerSocketListeners(): () => void {
     if (!exists) {
       store.setPlayers([...current.players, payload.player]);
     }
+    // Update room playerCount
+    if (current.room) {
+      store.setRoom({ ...current.room, playerCount: current.players.length + (exists ? 0 : 1) });
+    }
   };
 
   // ── player:left — player left the lobby ──────────────────────────────────
   const onPlayerLeft = (payload: PlayerLeftPayload): void => {
     store.removePlayer(payload.playerId);
+    const current = useGameStore.getState();
     if (payload.newHostId) {
-      const current = useGameStore.getState();
       const updatedPlayers = current.players.map((p) => ({
         ...p,
         isHost: p.playerId === payload.newHostId,
       }));
       store.setPlayers(updatedPlayers);
+    }
+    if (current.room) {
+      store.setRoom({ ...current.room, playerCount: current.players.length });
     }
   };
 
@@ -60,18 +72,14 @@ export function registerSocketListeners(): () => void {
   const onPlayerReconnecting = (payload: PlayerReconnectingPayload): void => {
     const current = useGameStore.getState();
     const player = current.players.find((p) => p.playerId === payload.playerId);
-    if (player) {
-      store.updatePlayer({ ...player, status: 'RECONNECTING' });
-    }
+    if (player) store.updatePlayer({ ...player, status: 'RECONNECTING' });
   };
 
   // ── player:reconnected — player came back ────────────────────────────────
   const onPlayerReconnected = (payload: PlayerReconnectingPayload): void => {
     const current = useGameStore.getState();
     const player = current.players.find((p) => p.playerId === payload.playerId);
-    if (player) {
-      store.updatePlayer({ ...player, status: 'ACTIVE' });
-    }
+    if (player) store.updatePlayer({ ...player, status: 'ACTIVE' });
   };
 
   // ── phase:changed — game phase transitioned ──────────────────────────────
@@ -85,6 +93,18 @@ export function registerSocketListeners(): () => void {
         currentPhase: payload.phase,
       });
     }
+    // Reset round-scoped state on new round phases
+    if (payload.phase === 'REVEAL' || payload.phase === 'VOTE') {
+      store.resetRound();
+    }
+    if (payload.phase === 'DEBATE') {
+      store.setDebateTimer(payload.timerSeconds);
+    }
+  };
+
+  // ── scenarios:list — host triggered game start ────────────────────────────
+  const onScenariosList = (payload: ScenariosListPayload): void => {
+    store.setAvailableScenarios(payload.scenarios);
   };
 
   // ── game:started — scenario picked, characters dealt ────────────────────
@@ -102,16 +122,44 @@ export function registerSocketListeners(): () => void {
     const current = useGameStore.getState();
     const player = current.players.find((p) => p.playerId === payload.playerId);
     if (player) {
-      store.updatePlayer({
-        ...player,
-        visibleTraits: payload.revealedTraits,
-      });
+      // Merge revealed traits with existing visible traits
+      const existingTraits = player.visibleTraits;
+      const newTraitCategories = new Set(payload.revealedTraits.map((t) => t.category));
+      const merged = [
+        ...existingTraits.filter((t) => !newTraitCategories.has(t.category)),
+        ...payload.revealedTraits,
+      ];
+      store.updatePlayer({ ...player, visibleTraits: merged });
+    }
+    // Mark own reveal as submitted
+    const ownId = useGameStore.getState().ownPlayerId;
+    if (payload.playerId === ownId) {
+      store.setIsRevealed(true);
     }
   };
 
   // ── vote:update — a player voted ─────────────────────────────────────────
-  const onVoteUpdate = (_payload: VoteUpdatePayload): void => {
-    // Vote tally update — handled by game view in Sprint 1
+  const onVoteUpdate = (payload: VoteUpdatePayload): void => {
+    store.addVote({
+      voterId: payload.voterId,
+      targetId: payload.targetId,
+      submittedAt: new Date(),
+      isAbstention: false,
+    });
+    store.setVoteTally(payload.tally);
+  };
+
+  // ── vote:tiebreaker ───────────────────────────────────────────────────────
+  const onVoteTiebreaker = (payload: VoteTiebreakerPayload): void => {
+    store.setTiebreaker({
+      tiedPlayerIds: payload.tiedPlayerIds,
+      isHostDeciding: payload.isHostDeciding,
+      decidingPlayerId: payload.decidingPlayerId,
+    });
+    // Reset votes for re-vote
+    store.setVoteTally({});
+    const current = useGameStore.getState();
+    store.setPlayers(current.players.map((p) => ({ ...p })));
   };
 
   // ── player:eliminated — a player was voted out ───────────────────────────
@@ -129,11 +177,38 @@ export function registerSocketListeners(): () => void {
   };
 
   // ── game:ended ────────────────────────────────────────────────────────────
-  const onGameEnded = (_payload: GameEndedPayload): void => {
+  const onGameEnded = (payload: GameEndedPayload): void => {
     const current = useGameStore.getState();
     if (current.room) {
       store.setRoom({ ...current.room, state: 'ENDED' });
     }
+    store.setGameEnded({
+      reason: payload.reason,
+      survivors: payload.survivors,
+      eliminated: payload.eliminated,
+      outcomeSummary: payload.outcomeSummary,
+    });
+  };
+
+  // ── timer:tick — debate countdown ─────────────────────────────────────────
+  const onTimerTick = (payload: TimerTickPayload): void => {
+    store.setDebateTimer(payload.remaining);
+  };
+
+  // ── timer:extended — host added time ─────────────────────────────────────
+  const onTimerExtended = (payload: TimerExtendedPayload): void => {
+    store.setDebateTimer(payload.newRemaining);
+  };
+
+  // ── host:transferred — host role changed ─────────────────────────────────
+  const onHostTransferred = (payload: HostTransferredPayload): void => {
+    const current = useGameStore.getState();
+    store.setPlayers(
+      current.players.map((p) => ({
+        ...p,
+        isHost: p.playerId === payload.newHostId,
+      })),
+    );
   };
 
   // ── connection state ──────────────────────────────────────────────────────
@@ -148,16 +223,20 @@ export function registerSocketListeners(): () => void {
   socket.on(EVENTS.PLAYER_RECONNECTING, onPlayerReconnecting);
   socket.on(EVENTS.PLAYER_RECONNECTED, onPlayerReconnected);
   socket.on(EVENTS.PHASE_CHANGED, onPhaseChanged);
+  socket.on(EVENTS.SCENARIOS_LIST, onScenariosList);
   socket.on(EVENTS.GAME_STARTED, onGameStarted);
   socket.on(EVENTS.REVEAL_UPDATE, onRevealUpdate);
   socket.on(EVENTS.VOTE_UPDATE, onVoteUpdate);
+  socket.on(EVENTS.VOTE_TIEBREAKER, onVoteTiebreaker);
   socket.on(EVENTS.PLAYER_ELIMINATED, onPlayerEliminated);
   socket.on(EVENTS.GAME_ENDED, onGameEnded);
+  socket.on(EVENTS.TIMER_TICK, onTimerTick);
+  socket.on(EVENTS.TIMER_EXTENDED, onTimerExtended);
+  socket.on(EVENTS.HOST_TRANSFERRED, onHostTransferred);
   socket.on('connect', onConnect);
   socket.on('disconnect', onDisconnect);
   socket.on('connect_error', onConnectError);
 
-  // Return cleanup function
   return () => {
     socket.off(EVENTS.ROOM_STATE, onRoomState);
     socket.off(EVENTS.PLAYER_JOINED, onPlayerJoined);
@@ -165,11 +244,16 @@ export function registerSocketListeners(): () => void {
     socket.off(EVENTS.PLAYER_RECONNECTING, onPlayerReconnecting);
     socket.off(EVENTS.PLAYER_RECONNECTED, onPlayerReconnected);
     socket.off(EVENTS.PHASE_CHANGED, onPhaseChanged);
+    socket.off(EVENTS.SCENARIOS_LIST, onScenariosList);
     socket.off(EVENTS.GAME_STARTED, onGameStarted);
     socket.off(EVENTS.REVEAL_UPDATE, onRevealUpdate);
     socket.off(EVENTS.VOTE_UPDATE, onVoteUpdate);
+    socket.off(EVENTS.VOTE_TIEBREAKER, onVoteTiebreaker);
     socket.off(EVENTS.PLAYER_ELIMINATED, onPlayerEliminated);
     socket.off(EVENTS.GAME_ENDED, onGameEnded);
+    socket.off(EVENTS.TIMER_TICK, onTimerTick);
+    socket.off(EVENTS.TIMER_EXTENDED, onTimerExtended);
+    socket.off(EVENTS.HOST_TRANSFERRED, onHostTransferred);
     socket.off('connect', onConnect);
     socket.off('disconnect', onDisconnect);
     socket.off('connect_error', onConnectError);

@@ -14,13 +14,10 @@
 
 import type { Server, Socket } from 'socket.io';
 import { z } from 'zod';
-import { v4 as uuidv4 } from 'uuid';
 import {
   EVENTS,
   MIN_PLAYERS,
   MAX_PLAYERS,
-  DEBATE_TIMER_SECONDS,
-  REVEAL_QUOTAS,
 } from '@bunker/shared';
 import type {
   HostKickPayload, HostKickAck,

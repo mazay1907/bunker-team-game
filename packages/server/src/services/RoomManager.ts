@@ -21,6 +21,7 @@ import type { IRoomStore } from '../store/RoomStore.js';
 import type { ISessionStore } from '../store/SessionStore.js';
 import type { IReconnectStore } from '../store/ReconnectStore.js';
 import type { CreateRoomResponse } from '@bunker/shared';
+import type { ContentData } from '../content/ContentData.js';
 
 // Maximum retries for room code generation on collision
 const MAX_CODE_RETRIES = 10;
@@ -161,14 +162,19 @@ export class RoomManager {
 
   /**
    * Builds a RoomView (safe client projection) from a Room.
+   * Pass contentData to include the scenario when the game is active.
    */
-  toRoomView(room: Room): RoomView {
+  toRoomView(room: Room, contentData?: ContentData): RoomView {
+    const scenario =
+      room.scenarioId && contentData
+        ? (contentData.getScenario(room.scenarioId) ?? null)
+        : null;
     return {
       roomCode: room.roomCode,
       state: room.state,
       currentRound: room.currentRound,
       currentPhase: room.currentPhase,
-      scenario: null, // filled in with ContentData when game is active
+      scenario,
       playerCount: room.players.size,
     };
   }

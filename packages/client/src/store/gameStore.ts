@@ -7,13 +7,25 @@
  * WHY Zustand (not useReducer + Context):
  * Socket.IO events fire outside React's render cycle. Zustand's store can be
  * updated from socket listeners without causing full-tree re-renders.
- * A context dispatch chain would re-render everything on every socket event.
  */
 
 import { create } from 'zustand';
-import type { RoomView, PlayerView, CharacterCard, GameView } from '@bunker/shared';
+import type {
+  RoomView,
+  PlayerView,
+  CharacterCard,
+  GameView,
+  Scenario,
+  VoteRecord,
+} from '@bunker/shared';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
+
+interface TiebreakerState {
+  tiedPlayerIds: string[];
+  isHostDeciding: boolean;
+  decidingPlayerId: string | null;
+}
 
 interface GameState {
   // Connection
@@ -29,8 +41,28 @@ interface GameState {
   ownPlayerId: string | null;
   ownNickname: string | null;
 
-  // Error state
+  // Scenario picker
+  availableScenarios: Scenario[];
+
+  // Vote state
+  votes: VoteRecord[];
+  voteTally: Record<string, number>;
+  tiebreaker: TiebreakerState | null;
+
+  // Timer
+  debateTimer: number | null;
+
+  // UI state
   lastError: string | null;
+  isRevealed: boolean; // has own player submitted reveal this round
+
+  // Game-end state
+  gameEnded: {
+    reason: 'COMPLETED' | 'HOST_ENDED_EARLY';
+    survivors: PlayerView[];
+    eliminated: PlayerView[];
+    outcomeSummary: string;
+  } | null;
 
   // Actions — called by socket event handlers
   setConnectionState: (state: ConnectionState) => void;
@@ -42,7 +74,15 @@ interface GameState {
   updatePlayer: (updated: PlayerView) => void;
   removePlayer: (playerId: string) => void;
   setLastError: (error: string | null) => void;
+  setAvailableScenarios: (scenarios: Scenario[]) => void;
+  addVote: (vote: VoteRecord) => void;
+  setVoteTally: (tally: Record<string, number>) => void;
+  setTiebreaker: (state: TiebreakerState | null) => void;
+  setDebateTimer: (remaining: number | null) => void;
+  setIsRevealed: (val: boolean) => void;
+  setGameEnded: (payload: GameState['gameEnded']) => void;
   reset: () => void;
+  resetRound: () => void;
 }
 
 const initialState = {
@@ -53,7 +93,14 @@ const initialState = {
   game: null,
   ownPlayerId: null,
   ownNickname: null,
+  availableScenarios: [],
+  votes: [],
+  voteTally: {},
+  tiebreaker: null,
+  debateTimer: null,
   lastError: null,
+  isRevealed: false,
+  gameEnded: null,
 };
 
 export const useGameStore = create<GameState>((set) => ({
@@ -85,6 +132,28 @@ export const useGameStore = create<GameState>((set) => ({
     })),
 
   setLastError: (lastError) => set({ lastError }),
+
+  setAvailableScenarios: (availableScenarios) => set({ availableScenarios }),
+
+  addVote: (vote) =>
+    set((state) => {
+      // Replace existing vote from same voter if any
+      const filtered = state.votes.filter((v) => v.voterId !== vote.voterId);
+      return { votes: [...filtered, vote] };
+    }),
+
+  setVoteTally: (voteTally) => set({ voteTally }),
+
+  setTiebreaker: (tiebreaker) => set({ tiebreaker }),
+
+  setDebateTimer: (debateTimer) => set({ debateTimer }),
+
+  setIsRevealed: (isRevealed) => set({ isRevealed }),
+
+  setGameEnded: (gameEnded) => set({ gameEnded }),
+
+  resetRound: () =>
+    set({ votes: [], voteTally: {}, tiebreaker: null, isRevealed: false }),
 
   reset: () => set(initialState),
 }));
