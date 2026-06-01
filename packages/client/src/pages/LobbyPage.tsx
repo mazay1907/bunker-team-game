@@ -273,7 +273,7 @@ function LobbyPage(): JSX.Element {
     );
   }
 
-  if (lastError === 'SESSION_TRANSFERRED' || lastError === t('error.SESSION_TRANSFERRED')) {
+  if (lastError === 'SESSION_TRANSFERRED') {
     return (
       <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
         <div className="text-center p-8 max-w-sm">
