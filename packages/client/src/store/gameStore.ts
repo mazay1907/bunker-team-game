@@ -27,6 +27,11 @@ interface TiebreakerState {
   decidingPlayerId: string | null;
 }
 
+interface DisconnectedVoterPromptState {
+  disconnectedPlayerId: string;
+  disconnectedNickname: string;
+}
+
 interface GameState {
   // Connection
   connectionState: ConnectionState;
@@ -48,6 +53,7 @@ interface GameState {
   votes: VoteRecord[];
   voteTally: Record<string, number>;
   tiebreaker: TiebreakerState | null;
+  disconnectedVoterPrompt: DisconnectedVoterPromptState | null;
 
   // Timer
   debateTimer: number | null;
@@ -78,6 +84,7 @@ interface GameState {
   addVote: (vote: VoteRecord) => void;
   setVoteTally: (tally: Record<string, number>) => void;
   setTiebreaker: (state: TiebreakerState | null) => void;
+  setDisconnectedVoterPrompt: (state: DisconnectedVoterPromptState | null) => void;
   setDebateTimer: (remaining: number | null) => void;
   setIsRevealed: (val: boolean) => void;
   setGameEnded: (payload: GameState['gameEnded']) => void;
@@ -97,6 +104,7 @@ const initialState = {
   votes: [],
   voteTally: {},
   tiebreaker: null,
+  disconnectedVoterPrompt: null,
   debateTimer: null,
   lastError: null,
   isRevealed: false,
@@ -146,6 +154,8 @@ export const useGameStore = create<GameState>((set) => ({
 
   setTiebreaker: (tiebreaker) => set({ tiebreaker }),
 
+  setDisconnectedVoterPrompt: (disconnectedVoterPrompt) => set({ disconnectedVoterPrompt }),
+
   setDebateTimer: (debateTimer) => set({ debateTimer }),
 
   setIsRevealed: (isRevealed) => set({ isRevealed }),
@@ -153,7 +163,7 @@ export const useGameStore = create<GameState>((set) => ({
   setGameEnded: (gameEnded) => set({ gameEnded }),
 
   resetRound: () =>
-    set({ votes: [], voteTally: {}, tiebreaker: null, isRevealed: false }),
+    set({ votes: [], voteTally: {}, tiebreaker: null, disconnectedVoterPrompt: null, isRevealed: false }),
 
   reset: () => set(initialState),
 }));

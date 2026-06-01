@@ -25,9 +25,16 @@ import type {
   TimerExtendedPayload,
   VoteTiebreakerPayload,
   HostTransferredPayload,
+  PlayerKickedPayload,
+  HostDisconnectedVoterPromptPayload,
 } from '@bunker/shared';
 
-export function registerSocketListeners(): () => void {
+interface ListenerOptions {
+  /** Called when the local player is kicked from the room */
+  onKicked?: () => void;
+}
+
+export function registerSocketListeners(options?: ListenerOptions): () => void {
   const store = useGameStore.getState();
 
   // ── room:state — full re-sync on join or reconnect ────────────────────────
@@ -211,12 +218,28 @@ export function registerSocketListeners(): () => void {
     );
   };
 
+  // ── player:kicked — this player was removed from room ────────────────────
+  const onPlayerKicked = (_payload: PlayerKickedPayload): void => {
+    store.reset();
+    options?.onKicked?.();
+  };
+
+  // ── host:disconnectedVoterPrompt — host action needed for voter ───────────
+  const onDisconnectedVoterPrompt = (payload: HostDisconnectedVoterPromptPayload): void => {
+    store.setDisconnectedVoterPrompt({
+      disconnectedPlayerId: payload.disconnectedPlayerId,
+      disconnectedNickname: payload.disconnectedNickname,
+    });
+  };
+
   // ── connection state ──────────────────────────────────────────────────────
   const onConnect = (): void => store.setConnectionState('connected');
   const onDisconnect = (): void => store.setConnectionState('disconnected');
   const onConnectError = (): void => store.setConnectionState('error');
 
   // Register all listeners
+  socket.on(EVENTS.PLAYER_KICKED, onPlayerKicked);
+  socket.on(EVENTS.HOST_DISCONNECTED_VOTER_PROMPT, onDisconnectedVoterPrompt);
   socket.on(EVENTS.ROOM_STATE, onRoomState);
   socket.on(EVENTS.PLAYER_JOINED, onPlayerJoined);
   socket.on(EVENTS.PLAYER_LEFT, onPlayerLeft);
@@ -238,6 +261,8 @@ export function registerSocketListeners(): () => void {
   socket.on('connect_error', onConnectError);
 
   return () => {
+    socket.off(EVENTS.PLAYER_KICKED, onPlayerKicked);
+    socket.off(EVENTS.HOST_DISCONNECTED_VOTER_PROMPT, onDisconnectedVoterPrompt);
     socket.off(EVENTS.ROOM_STATE, onRoomState);
     socket.off(EVENTS.PLAYER_JOINED, onPlayerJoined);
     socket.off(EVENTS.PLAYER_LEFT, onPlayerLeft);

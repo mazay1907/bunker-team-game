@@ -11,6 +11,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { HelpCircle } from 'lucide-react';
 import { EVENTS, TRAIT_CATEGORIES } from '@bunker/shared';
 import type {
   TraitCategory,
@@ -19,6 +20,7 @@ import type {
   HostExtendTimerAck,
   HostForceVoteAck,
   HostEndGameAck,
+  HostSkipVoteAck,
 } from '@bunker/shared';
 import { socket } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
@@ -28,6 +30,7 @@ import { ScenarioCard } from '../components/game/ScenarioCard.js';
 import { OwnCharacterCard } from '../components/game/OwnCharacterCard.js';
 import { PlayerList } from '../components/game/PlayerList.js';
 import { DebateTimer } from '../components/game/DebateTimer.js';
+import { HowToPlayOverlay } from '../components/game/HowToPlayOverlay.js';
 
 // ── Button style constants ────────────────────────────────────────────────────
 
@@ -235,17 +238,21 @@ function GamePage(): JSX.Element {
   const {
     room, players, ownCharacter, ownPlayerId,
     debateTimer, tiebreaker, isRevealed, votes, voteTally, gameEnded,
+    disconnectedVoterPrompt, setDisconnectedVoterPrompt,
   } = useGameStore();
 
   const [selectedCats, setSelectedCats] = useState<TraitCategory[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
 
   useEffect(() => {
-    const cleanup = registerSocketListeners();
+    const cleanup = registerSocketListeners({
+      onKicked: () => navigate('/', { replace: true }),
+    });
     return cleanup;
-  }, []);
+  }, [navigate]);
 
   // Reset per-phase state when phase changes
   useEffect(() => {
@@ -321,6 +328,18 @@ function GamePage(): JSX.Element {
     });
   }, []);
 
+  const handleSkipVote = useCallback((disconnectedPlayerId: string): void => {
+    socket.emit(EVENTS.HOST_SKIP_VOTE, { disconnectedPlayerId }, (ack: HostSkipVoteAck) => {
+      if (!ack.ok) console.error('skip vote error:', ack.error);
+    });
+    setDisconnectedVoterPrompt(null);
+  }, [setDisconnectedVoterPrompt]);
+
+  const handleWaitForVoter = useCallback((): void => {
+    // Dismiss the modal — the server will re-prompt after 60 seconds if still disconnected
+    setDisconnectedVoterPrompt(null);
+  }, [setDisconnectedVoterPrompt]);
+
   const scenario = room.scenario;
 
   // Unrevealed categories for reveal phase
@@ -339,6 +358,9 @@ function GamePage(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-bunker-bg text-bunker-text flex flex-col">
+      {/* How to play overlay */}
+      {showHowToPlay && <HowToPlayOverlay onClose={() => setShowHowToPlay(false)} />}
+
       {/* Tiebreaker modal */}
       {tiebreaker && (
         <TiebreakerModal
@@ -349,6 +371,31 @@ function GamePage(): JSX.Element {
           players={players}
           onVote={handleVote}
         />
+      )}
+
+      {/* Disconnected voter prompt — shown to host only */}
+      {disconnectedVoterPrompt && isHost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-bunker-surface border border-bunker-border rounded p-6 max-w-sm w-full mx-4 animate-[fade-in_300ms_ease-out]">
+            <p className="font-inter text-bunker-text mb-6 text-center">
+              {t('host.disconnectedVoter.title', { nickname: disconnectedVoterPrompt.disconnectedNickname })}
+            </p>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 h-12 rounded border border-bunker-border text-bunker-muted font-inter text-sm hover:border-bunker-hot/50 hover:text-bunker-text transition-colors duration-150"
+                onClick={handleWaitForVoter}
+              >
+                {t('host.disconnectedVoter.wait')}
+              </button>
+              <button
+                className="flex-1 h-12 rounded bg-bunker-danger text-white font-oswald font-semibold text-sm uppercase tracking-wider hover:opacity-90 transition-opacity duration-150"
+                onClick={() => handleSkipVote(disconnectedVoterPrompt.disconnectedPlayerId)}
+              >
+                {t('host.disconnectedVoter.skip')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* End game confirmation */}
@@ -384,6 +431,13 @@ function GamePage(): JSX.Element {
           <PhaseLabel phase={phase} />
           <div className="flex items-center gap-3">
             <span className="font-mono text-sm text-bunker-muted/60">{roomCode}</span>
+            <button
+              className="p-1.5 text-bunker-muted hover:text-bunker-text transition-colors duration-150"
+              onClick={() => setShowHowToPlay(true)}
+              title={t('howToPlay.title')}
+            >
+              <HelpCircle size={16} />
+            </button>
             {isHost && (
               <button
                 className="h-8 px-3 rounded border border-bunker-danger/40 text-bunker-danger font-inter text-xs hover:bg-bunker-danger/10 transition-colors duration-150"

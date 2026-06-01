@@ -27,6 +27,7 @@ import { registerRoomHandlers } from './socket/handlers/roomHandlers.js';
 import { registerHostHandlers } from './socket/handlers/hostHandlers.js';
 import { registerRevealHandlers } from './socket/handlers/revealHandlers.js';
 import { registerVoteHandlers } from './socket/handlers/voteHandlers.js';
+import { RoomExpiryService } from './services/RoomExpiryService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -104,6 +105,10 @@ async function start(): Promise<void> {
   const gsm = new GameStateMachine(roomStore, io);
   const timerService = new TimerService(io);
   const voteEngine = new VoteEngine();
+
+  // Room expiry — sweeps idle empty rooms every 5 minutes
+  const roomExpiry = new RoomExpiryService(roomStore, timerService);
+  roomExpiry.start();
 
   // Socket middleware — validates tokens, attaches playerId to socket.data
   io.use(createSocketMiddleware(sessionStore));

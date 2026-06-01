@@ -3,6 +3,9 @@
  *
  * Responsibilities:
  * - Debate timer (5 min, extendable, cancellable)
+ * - Reconnect hold timers (5 min per disconnected player)
+ * - Host-transfer timer (60 sec per host disconnect)
+ * - Room expiry check (30 min idle)
  * - Emits timer:tick every second during debate
  * - All timer handles cleared on room expiry to prevent memory leaks
  *
@@ -23,6 +26,18 @@ interface TimerEntry {
 export class TimerService {
   /** Active debate timers keyed by roomId */
   private readonly timers = new Map<string, TimerEntry>();
+
+  /**
+   * One-shot reconnect hold timers: key = `${roomId}:${playerId}`.
+   * Fires onExpire after RECONNECT_HOLD_SECONDS if player doesn't reconnect.
+   */
+  private readonly reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /**
+   * One-shot host-transfer timers: key = roomId.
+   * Fires onExpire after HOST_TRANSFER_SECONDS if host doesn't reconnect.
+   */
+  private readonly hostTransferTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(private readonly io: Server) {}
 
@@ -90,9 +105,61 @@ export class TimerService {
   }
 
   /**
+   * Starts a one-shot reconnect hold timer for a specific player.
+   * onExpire fires after `seconds` if not cancelled by clearReconnectTimer.
+   */
+  startReconnectTimer(roomId: string, playerId: string, seconds: number, onExpire: () => void): void {
+    const key = `${roomId}:${playerId}`;
+    this.clearReconnectTimer(roomId, playerId);
+    const handle = setTimeout(onExpire, seconds * 1000);
+    this.reconnectTimers.set(key, handle);
+  }
+
+  /**
+   * Cancels a player's reconnect hold timer (player reconnected in time).
+   */
+  clearReconnectTimer(roomId: string, playerId: string): void {
+    const key = `${roomId}:${playerId}`;
+    const handle = this.reconnectTimers.get(key);
+    if (handle !== undefined) {
+      clearTimeout(handle);
+      this.reconnectTimers.delete(key);
+    }
+  }
+
+  /**
+   * Starts a one-shot host-transfer timer for a room.
+   * onExpire fires after `seconds` if the host doesn't reconnect.
+   */
+  startHostTransferTimer(roomId: string, seconds: number, onExpire: () => void): void {
+    this.cancelHostTransferTimer(roomId);
+    const handle = setTimeout(onExpire, seconds * 1000);
+    this.hostTransferTimers.set(roomId, handle);
+  }
+
+  /**
+   * Cancels the host-transfer timer (host reconnected in time).
+   */
+  cancelHostTransferTimer(roomId: string): void {
+    const handle = this.hostTransferTimers.get(roomId);
+    if (handle !== undefined) {
+      clearTimeout(handle);
+      this.hostTransferTimers.delete(roomId);
+    }
+  }
+
+  /**
    * Clears all timers for a room (called on room expiry/cleanup).
    */
   clearAll(roomId: string): void {
     this.cancelTimer(roomId);
+    this.cancelHostTransferTimer(roomId);
+    // Clear all reconnect timers for this room
+    for (const key of this.reconnectTimers.keys()) {
+      if (key.startsWith(`${roomId}:`)) {
+        clearTimeout(this.reconnectTimers.get(key));
+        this.reconnectTimers.delete(key);
+      }
+    }
   }
 }

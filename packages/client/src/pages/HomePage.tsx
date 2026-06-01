@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { t } from '../i18n/t.js';
-import { socket, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY } from '../socket/socket.js';
+import { socket, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY, claimSession } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type { RoomJoinPayload, RoomJoinAck, CreateRoomResponse } from '@bunker/shared';
@@ -76,6 +76,8 @@ function HomePage(): JSX.Element {
         socket.once('connect', () => { clearTimeout(timeout); resolve(); });
         socket.once('connect_error', (err) => { clearTimeout(timeout); reject(err); });
       });
+      // Tell other tabs that this tab has claimed the session
+      claimSession();
 
       const joinPayload: RoomJoinPayload = {
         roomCode: data.roomCode,

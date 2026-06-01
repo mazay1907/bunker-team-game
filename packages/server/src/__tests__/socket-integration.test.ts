@@ -13,6 +13,8 @@ import { InMemoryRoomStore } from '../store/RoomStore.js';
 import { InMemorySessionStore } from '../store/SessionStore.js';
 import { InMemoryReconnectStore } from '../store/ReconnectStore.js';
 import { RoomManager } from '../services/RoomManager.js';
+import { GameStateMachine } from '../services/GameStateMachine.js';
+import { TimerService } from '../services/TimerService.js';
 import { createSocketMiddleware } from '../socket/middleware.js';
 import { registerRoomHandlers } from '../socket/handlers/roomHandlers.js';
 
@@ -33,8 +35,11 @@ beforeEach(async () => {
   io = new SocketIOServer(httpServer, { cors: { origin: '*' } });
   io.use(createSocketMiddleware(sessionStore));
 
+  const gsm = new GameStateMachine(roomStore, io);
+  const timerService = new TimerService(io);
+
   io.on('connection', (socket) => {
-    registerRoomHandlers(socket, { io, roomStore, sessionStore, reconnectStore, roomManager });
+    registerRoomHandlers(socket, { io, roomStore, sessionStore, reconnectStore, roomManager, gsm, timerService });
   });
 
   await new Promise<void>((resolve) => {

@@ -11,8 +11,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { Copy, Check, Crown, X, Users } from 'lucide-react';
-import { socket, RECONNECT_TOKEN_KEY, SESSION_TOKEN_KEY } from '../socket/socket.js';
+import { Copy, Check, Crown, X, Users, HelpCircle } from 'lucide-react';
+import { socket, RECONNECT_TOKEN_KEY, SESSION_TOKEN_KEY, claimSession } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type {
@@ -24,6 +24,7 @@ import type {
 } from '@bunker/shared';
 import { t } from '../i18n/t.js';
 import { registerSocketListeners } from '../socket/listeners.js';
+import { HowToPlayOverlay } from '../components/game/HowToPlayOverlay.js';
 
 interface LocationState {
   nickname?: string;
@@ -156,6 +157,7 @@ function LobbyPage(): JSX.Element {
   const [isJoining, setIsJoining] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
 
   // Navigate to game when game starts
   useEffect(() => {
@@ -176,7 +178,11 @@ function LobbyPage(): JSX.Element {
   useEffect(() => {
     if (!roomCode) { navigate('/'); return; }
 
-    const cleanup = registerSocketListeners();
+    const cleanup = registerSocketListeners({
+      onKicked: () => {
+        navigate('/', { replace: true });
+      },
+    });
 
     const nickname = locationState?.nickname;
     const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
@@ -192,6 +198,8 @@ function LobbyPage(): JSX.Element {
           socket.once('connect_error', (err) => { clearTimeout(timeout); reject(err); });
         });
       }
+      // Tell other tabs that this tab is claiming the session
+      claimSession();
 
       const payload: RoomJoinPayload = {
         roomCode: roomCode.toUpperCase(),
@@ -266,6 +274,21 @@ function LobbyPage(): JSX.Element {
     );
   }
 
+  if (lastError === 'SESSION_TRANSFERRED') {
+    return (
+      <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
+        <div className="text-center p-8 max-w-sm">
+          <p className="font-inter text-bunker-muted mb-6">
+            {t('error.SESSION_TRANSFERRED')}
+          </p>
+          <button className={btnPrimary} onClick={() => navigate('/')}>
+            {t('end.createNew')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (lastError && !room) {
     return (
       <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
@@ -281,6 +304,9 @@ function LobbyPage(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-bunker-bg text-bunker-text flex flex-col">
+      {/* How to play overlay */}
+      {showHowToPlay && <HowToPlayOverlay onClose={() => setShowHowToPlay(false)} />}
+
       {/* Scenario picker modal */}
       {isScenarioPick && availableScenarios.length > 0 && (
         <ScenarioPicker isHost={isHost} onPick={() => void 0} />
@@ -306,6 +332,13 @@ function LobbyPage(): JSX.Element {
                 ? <><Check size={14} /><span>{t('lobby.linkCopied')}</span></>
                 : <><Copy size={14} /><span>{t('lobby.copyLink')}</span></>
               }
+            </button>
+            <button
+              className="p-1.5 text-bunker-muted hover:text-bunker-text transition-colors duration-150"
+              onClick={() => setShowHowToPlay(true)}
+              title={t('howToPlay.title')}
+            >
+              <HelpCircle size={16} />
             </button>
           </div>
         </div>
