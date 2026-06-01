@@ -55,6 +55,9 @@ interface GameState {
   tiebreaker: TiebreakerState | null;
   disconnectedVoterPrompt: DisconnectedVoterPromptState | null;
 
+  // Reveal phase
+  revealWaitingFor: number;
+
   // Timer
   debateTimer: number | null;
 
@@ -87,6 +90,7 @@ interface GameState {
   setDisconnectedVoterPrompt: (state: DisconnectedVoterPromptState | null) => void;
   setDebateTimer: (remaining: number | null) => void;
   setIsRevealed: (val: boolean) => void;
+  setRevealWaitingFor: (count: number) => void;
   setGameEnded: (payload: GameState['gameEnded']) => void;
   reset: () => void;
   resetRound: () => void;
@@ -105,6 +109,7 @@ const initialState = {
   voteTally: {},
   tiebreaker: null,
   disconnectedVoterPrompt: null,
+  revealWaitingFor: 0,
   debateTimer: null,
   lastError: null,
   isRevealed: false,
@@ -160,10 +165,12 @@ export const useGameStore = create<GameState>((set) => ({
 
   setIsRevealed: (isRevealed) => set({ isRevealed }),
 
+  setRevealWaitingFor: (revealWaitingFor) => set({ revealWaitingFor }),
+
   setGameEnded: (gameEnded) => set({ gameEnded }),
 
   resetRound: () =>
-    set({ votes: [], voteTally: {}, tiebreaker: null, disconnectedVoterPrompt: null, isRevealed: false }),
+    set({ votes: [], voteTally: {}, tiebreaker: null, disconnectedVoterPrompt: null, isRevealed: false, revealWaitingFor: 0 }),
 
   reset: () => set(initialState),
 }));

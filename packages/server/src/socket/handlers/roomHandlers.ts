@@ -39,6 +39,7 @@ import { RoomManager } from '../../services/RoomManager.js';
 import type { ContentData } from '../../content/ContentData.js';
 import type { TimerService } from '../../services/TimerService.js';
 import type { GameStateMachine } from '../../services/GameStateMachine.js';
+import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 
 // Zod schema for room:join payload validation
 const roomJoinSchema = z.object({
@@ -412,12 +413,12 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
 
       gsm.transitionTo(roomId, 'ENDED');
 
-      const survivorNames = survivors.map((p) => p.nickname).join(', ');
+      const outcomeSummary = buildOutcomeSummary(survivors, eliminated, 'COMPLETED');
       io.to(roomId).emit(EVENTS.GAME_ENDED, {
         reason: 'COMPLETED',
         survivors: survivors.map((p) => roomManager.toPlayerView(p, room, p.playerId)),
         eliminated: eliminated.map((p) => roomManager.toPlayerView(p, room, p.playerId)),
-        outcomeSummary: `У бункері залишились: ${survivorNames}.`,
+        outcomeSummary,
       });
     } else {
       // Cancel any active vote/debate timers — round is skipped

@@ -40,6 +40,7 @@ import type { RoomManager } from '../../services/RoomManager.js';
 import type { GameStateMachine } from '../../services/GameStateMachine.js';
 import type { TimerService } from '../../services/TimerService.js';
 import type { CharacterDealer } from '../../services/CharacterDealer.js';
+import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 
 interface HostHandlerDeps {
   io: Server;
@@ -309,11 +310,7 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     const toView = (p: typeof allPlayers[0]): PlayerView =>
       roomManager.toPlayerView(p, updated, p.playerId);
 
-    const survivorNames = survivors.map((p) => p.nickname).join(', ');
-    const outcomeSummary =
-      reason === 'HOST_ENDED_EARLY'
-        ? 'Гру завершено достроково.'
-        : `У бункері залишились: ${survivorNames}.`;
+    const outcomeSummary = buildOutcomeSummary(survivors, eliminated, reason);
 
     const payload: GameEndedPayload = {
       reason,

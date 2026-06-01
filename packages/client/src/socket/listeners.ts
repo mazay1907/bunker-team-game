@@ -138,6 +138,8 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
       ];
       store.updatePlayer({ ...player, visibleTraits: merged });
     }
+    // Track how many players still need to submit
+    store.setRevealWaitingFor(payload.waitingFor);
     // Mark own reveal as submitted
     const ownId = useGameStore.getState().ownPlayerId;
     if (payload.playerId === ownId) {

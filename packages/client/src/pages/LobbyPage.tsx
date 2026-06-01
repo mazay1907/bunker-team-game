@@ -156,7 +156,6 @@ function LobbyPage(): JSX.Element {
 
   const [isJoining, setIsJoining] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
 
   // Navigate to game when game starts

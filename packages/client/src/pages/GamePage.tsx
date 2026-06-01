@@ -239,6 +239,7 @@ function GamePage(): JSX.Element {
     room, players, ownCharacter, ownPlayerId,
     debateTimer, tiebreaker, isRevealed, votes, voteTally, gameEnded,
     disconnectedVoterPrompt, setDisconnectedVoterPrompt,
+    revealWaitingFor,
   } = useGameStore();
 
   const [selectedCats, setSelectedCats] = useState<TraitCategory[]>([]);
@@ -350,7 +351,8 @@ function GamePage(): JSX.Element {
     : [];
   const selectableCats = TRAIT_CATEGORIES.filter((c) => !alreadyRevealedCats.includes(c));
 
-  const waitingFor = players.filter(
+  // Number of players who haven't voted yet (used in VOTE phase display)
+  const voteWaitingFor = players.filter(
     (p) =>
       (p.status === 'ACTIVE' || p.status === 'RECONNECTING') &&
       !votes.some((v) => v.voterId === p.playerId),
@@ -495,9 +497,9 @@ function GamePage(): JSX.Element {
               {isRevealed ? (
                 <p className="font-inter text-sm text-bunker-muted text-center">
                   {t('game.reveal.alreadySubmitted')}
-                  {waitingFor > 0 && (
+                  {revealWaitingFor > 0 && (
                     <span className="block mt-1 text-bunker-muted/60">
-                      {t('game.reveal.waiting', { count: waitingFor })}
+                      {t('game.reveal.waiting', { count: revealWaitingFor })}
                     </span>
                   )}
                 </p>
@@ -530,8 +532,8 @@ function GamePage(): JSX.Element {
               {hasVoted ? (
                 <p className="font-inter text-xs text-bunker-success">
                   ✓ Ваш голос зараховано.
-                  {waitingFor > 0 && (
-                    <span className="text-bunker-muted"> {t('game.vote.waiting', { count: waitingFor })}</span>
+                  {voteWaitingFor > 0 && (
+                    <span className="text-bunker-muted"> {t('game.vote.waiting', { count: voteWaitingFor })}</span>
                   )}
                 </p>
               ) : submitError ? (

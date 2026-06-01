@@ -1,6 +1,13 @@
 /**
  * DebateTimer — countdown display with host controls.
- * Shows MM:SS format. Host-only: extend (+1 min) and force-vote buttons.
+ *
+ * Visual states:
+ * - Normal (>30s): white text
+ * - Urgent (≤30s): danger red text
+ * - Critical (≤10s): blinking danger red
+ *
+ * Host-only controls: extend (+1 min) and force-vote.
+ * Uses MM:SS format per Ukrainian locale convention.
  */
 
 import { t } from '../../i18n/t.js';
@@ -12,9 +19,14 @@ interface DebateTimerProps {
   onForceVote: () => void;
 }
 
+/**
+ * Formats seconds into MM:SS string.
+ * Clamped to 0 to avoid negative display.
+ */
 function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+  const clamped = Math.max(0, seconds);
+  const m = Math.floor(clamped / 60);
+  const s = clamped % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
@@ -25,6 +37,7 @@ export function DebateTimer({
   onForceVote,
 }: DebateTimerProps): JSX.Element {
   const isUrgent = remaining !== null && remaining <= 30;
+  const isCritical = remaining !== null && remaining <= 10;
 
   return (
     <div className="bg-bunker-surface border border-bunker-border rounded p-4 flex flex-col gap-3">
@@ -36,8 +49,12 @@ export function DebateTimer({
           <span className="font-inter text-xs text-bunker-muted">{t('game.debate.timeLeft')}:</span>
           <span
             className={[
-              'font-mono font-bold text-2xl tabular-nums',
-              isUrgent ? 'text-bunker-danger' : 'text-bunker-text',
+              'font-mono font-bold text-2xl tabular-nums transition-colors duration-300',
+              isCritical
+                ? 'text-bunker-danger animate-pulse'
+                : isUrgent
+                  ? 'text-bunker-danger'
+                  : 'text-bunker-text',
             ].join(' ')}
           >
             {remaining !== null ? formatTime(remaining) : '--:--'}

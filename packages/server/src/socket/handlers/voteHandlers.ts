@@ -34,6 +34,7 @@ import type { RoomManager } from '../../services/RoomManager.js';
 import type { GameStateMachine } from '../../services/GameStateMachine.js';
 import type { VoteEngine } from '../../services/VoteEngine.js';
 import type { TimerService } from '../../services/TimerService.js';
+import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 
 /** How long to hold a disconnected voter's slot before prompting host (seconds) */
 const DISCONNECTED_VOTER_HOLD_SECONDS = 30;
@@ -400,7 +401,7 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
 
       gsm.transitionTo(roomId, 'ENDED');
 
-      const survivorNames = survivors.map((p) => p.nickname).join(', ');
+      const outcomeSummary = buildOutcomeSummary(survivors, eliminated, 'COMPLETED');
       io.to(roomId).emit(EVENTS.GAME_ENDED, {
         reason: 'COMPLETED',
         survivors: survivors.map((p) =>
@@ -409,7 +410,7 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
         eliminated: eliminated.map((p) =>
           roomManager.toPlayerView(p, updatedRoom, p.playerId),
         ),
-        outcomeSummary: `У бункері залишились: ${survivorNames}.`,
+        outcomeSummary,
       });
     } else {
       const nextReveal = roundNumber === 1 ? 'R2_REVEAL' : 'R3_REVEAL';
