@@ -16,9 +16,17 @@ import { InMemoryRoomStore } from './store/RoomStore.js';
 import { InMemorySessionStore } from './store/SessionStore.js';
 import { InMemoryReconnectStore } from './store/ReconnectStore.js';
 import { RoomManager } from './services/RoomManager.js';
+import { GameStateMachine } from './services/GameStateMachine.js';
+import { TimerService } from './services/TimerService.js';
+import { VoteEngine } from './services/VoteEngine.js';
+import { CharacterDealer } from './services/CharacterDealer.js';
+import { ContentData } from './content/ContentData.js';
 import { registerRoutes } from './http/routes.js';
 import { createSocketMiddleware } from './socket/middleware.js';
 import { registerRoomHandlers } from './socket/handlers/roomHandlers.js';
+import { registerHostHandlers } from './socket/handlers/hostHandlers.js';
+import { registerRevealHandlers } from './socket/handlers/revealHandlers.js';
+import { registerVoteHandlers } from './socket/handlers/voteHandlers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -34,11 +42,17 @@ async function start(): Promise<void> {
     },
   });
 
+  // ── Content (loaded once at startup) ──────────────────────────────────────────
+  const contentData = new ContentData();
+
   // ── Stores (no singletons — injected via constructor) ─────────────────────────
   const roomStore = new InMemoryRoomStore();
   const sessionStore = new InMemorySessionStore();
   const reconnectStore = new InMemoryReconnectStore();
   const roomManager = new RoomManager(roomStore, sessionStore, reconnectStore);
+
+  // ── Services (injected, not singletons) ───────────────────────────────────────
+  const dealer = new CharacterDealer();
 
   // ── CORS ───────────────────────────────────────────────────────────────────────
   await fastify.register(cors, {
@@ -51,7 +65,6 @@ async function start(): Promise<void> {
     max: 10,
     timeWindow: '1 minute',
     keyGenerator: (req) => req.ip,
-    // Only apply to POST /api/rooms — done via route-level config
     skipOnError: false,
   });
 
@@ -61,9 +74,7 @@ async function start(): Promise<void> {
     await fastify.register(staticPlugin, {
       root: clientDistPath,
       prefix: '/',
-      // Serve index.html for all non-API routes (SPA fallback)
       setHeaders: (res) => {
-        // Content-Security-Policy for XSS mitigation
         res.setHeader(
           'Content-Security-Policy',
           `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:${PORT} wss://localhost:${PORT}`,
@@ -86,9 +97,13 @@ async function start(): Promise<void> {
       origin: ALLOWED_ORIGIN,
       methods: ['GET', 'POST'],
     },
-    // Needed for dev: Vite proxies /socket.io to port 3000
     path: '/socket.io',
   });
+
+  // Services that need io reference (created after io)
+  const gsm = new GameStateMachine(roomStore, io);
+  const timerService = new TimerService(io);
+  const voteEngine = new VoteEngine();
 
   // Socket middleware — validates tokens, attaches playerId to socket.data
   io.use(createSocketMiddleware(sessionStore));
@@ -98,19 +113,13 @@ async function start(): Promise<void> {
     let eventCount = 0;
     const WINDOW_MS = 1000;
     const MAX_EVENTS = 30;
-
     let windowStart = Date.now();
 
     socket.onAny(() => {
       const now = Date.now();
-      if (now - windowStart > WINDOW_MS) {
-        eventCount = 0;
-        windowStart = now;
-      }
+      if (now - windowStart > WINDOW_MS) { eventCount = 0; windowStart = now; }
       eventCount++;
-      if (eventCount > MAX_EVENTS) {
-        socket.disconnect(true);
-      }
+      if (eventCount > MAX_EVENTS) socket.disconnect(true);
     });
 
     next();
@@ -119,14 +128,24 @@ async function start(): Promise<void> {
   io.on('connection', (socket) => {
     console.log(`[connect] ${socket.id}`);
 
-    // Register all event handlers for this socket
-    registerRoomHandlers(socket, {
+    const handlerDeps = {
       io,
       roomStore,
       sessionStore,
       reconnectStore,
       roomManager,
-    });
+      gsm,
+      timerService,
+      voteEngine,
+      dealer,
+      contentData,
+    };
+
+    // Register all domain handlers
+    registerRoomHandlers(socket, handlerDeps);
+    registerHostHandlers(socket, handlerDeps);
+    registerRevealHandlers(socket, handlerDeps);
+    registerVoteHandlers(socket, handlerDeps);
 
     socket.on('disconnect', (reason) => {
       console.log(`[disconnect] ${socket.id} reason=${reason}`);
