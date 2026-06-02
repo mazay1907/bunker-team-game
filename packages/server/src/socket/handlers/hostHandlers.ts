@@ -37,6 +37,7 @@ import type {
   RoomClosedPayload,
   DebateOrderPayload,
   DebateSpeakerChangedPayload,
+  HostTransferredPayload,
   PlayerView,
   Game,
   VoteRecord,
@@ -87,6 +88,7 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     const found = roomManager.findPlayerById(playerId);
     if (!found) return null;
     if (found.room.hostPlayerId !== playerId) return null;
+    if (found.player.status === 'KICKED') return null;
     return found;
   }
 
@@ -142,6 +144,19 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
 
     const target = room.players.get(targetPlayerId);
     if (!target) return ack({ ok: false, error: 'PLAYER_NOT_FOUND' });
+
+    // If the target is the current host, transfer host role to the next eligible player first
+    if (targetPlayerId === room.hostPlayerId) {
+      const newHostId = roomManager.findNextHost(room.roomId, targetPlayerId);
+      if (newHostId) {
+        roomStore.updateRoom(room.roomId, (r) => {
+          r.hostPlayerId = newHostId;
+          return r;
+        });
+        const transferred: HostTransferredPayload = { newHostId, reason: 'DISCONNECT_TIMEOUT' };
+        io.to(room.roomId).emit(EVENTS.HOST_TRANSFERRED, transferred);
+      }
+    }
 
     // Notify the kicked player
     const kickedPayload: PlayerKickedPayload = { message: 'Вас видалено з кімнати' };

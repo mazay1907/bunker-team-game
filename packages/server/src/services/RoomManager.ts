@@ -183,6 +183,24 @@ export class RoomManager {
   }
 
   /**
+   * Finds the next eligible host in a room, excluding a specific player.
+   * Picks the ACTIVE/RECONNECTING player with the earliest joinedAt.
+   * Used when the current host is kicked or leaves.
+   */
+  findNextHost(roomId: string, excludePlayerId: string): string | null {
+    const room = this.roomStore.getRoom(roomId);
+    if (!room) return null;
+    const candidates = [...room.players.values()]
+      .filter(
+        (p) =>
+          p.playerId !== excludePlayerId &&
+          (p.status === 'ACTIVE' || p.status === 'RECONNECTING'),
+      )
+      .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
+    return candidates[0]?.playerId ?? null;
+  }
+
+  /**
    * Returns all players in a room as PlayerViews for the given viewer.
    */
   getPlayerViews(room: Room, viewerPlayerId: string): PlayerView[] {

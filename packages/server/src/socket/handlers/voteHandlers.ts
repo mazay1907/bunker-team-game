@@ -384,6 +384,9 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
     roundNumber: 1 | 2 | 3,
     reason: 'VOTE' | 'AUTO_TIMEOUT',
   ): void {
+    // Cancel any running vote/debate timer so leftover ticks don't pollute the next round
+    timerService.cancelTimer(roomId);
+
     // Reveal full character card
     roomStore.updateRoom(roomId, (r) => {
       const p = r.players.get(eliminatedId);
