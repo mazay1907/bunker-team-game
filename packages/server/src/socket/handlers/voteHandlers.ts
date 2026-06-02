@@ -34,7 +34,9 @@ import type { RoomManager } from '../../services/RoomManager.js';
 import type { GameStateMachine } from '../../services/GameStateMachine.js';
 import type { VoteEngine } from '../../services/VoteEngine.js';
 import type { TimerService } from '../../services/TimerService.js';
+import type { ContentData } from '../../content/ContentData.js';
 import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
+import { callSurvivalWebhook } from '../../services/SurvivalWebhook.js';
 import { startRevealPhaseTimer } from './revealHandlers.js';
 
 /** How long to hold a disconnected voter's slot before prompting host (seconds) */
@@ -49,6 +51,7 @@ interface VoteHandlerDeps {
   gsm: GameStateMachine;
   voteEngine: VoteEngine;
   timerService: TimerService;
+  contentData: ContentData;
 }
 
 const voteSubmitSchema = z.object({ targetId: z.string().uuid() });
@@ -59,7 +62,7 @@ let _voteCompletionChecker: ((roomId: string, roundNumber: 1 | 2 | 3) => void) |
 export const getVoteCompletionChecker = (): typeof _voteCompletionChecker => _voteCompletionChecker;
 
 export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): void {
-  const { io, roomStore, roomManager, gsm, voteEngine, timerService } = deps;
+  const { io, roomStore, roomManager, gsm, voteEngine, timerService, contentData } = deps;
 
   socket.on(
     EVENTS.VOTE_SUBMIT,
@@ -447,6 +450,12 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
         ),
         outcomeSummary,
       });
+
+      // Fire-and-forget AI survival prediction
+      if (updatedRoom.scenarioId) {
+        const scenario = contentData.getScenario(updatedRoom.scenarioId);
+        if (scenario) void callSurvivalWebhook(roomId, scenario, survivors, io);
+      }
     } else {
       const nextRoundNumber = (roundNumber + 1) as 2 | 3;
       const nextReveal = roundNumber === 1 ? 'R2_REVEAL' : 'R3_REVEAL';
