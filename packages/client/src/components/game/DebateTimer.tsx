@@ -52,7 +52,9 @@ export function DebateTimer({
   const timerRunning = remaining !== null && remaining > 0;
   const isUrgent = timerRunning && remaining <= 30;
   const isCritical = timerRunning && remaining <= 10;
-  const showTimerEnded = timerEnded || (remaining !== null && remaining === 0);
+  // timerEnded is set by the explicit TIMER_ENDED server event (not just reaching 0,
+  // because between speakers the counter hits 0 briefly before restarting for the next speaker)
+  const showTimerEnded = timerEnded;
 
   return (
     <div className="bg-bunker-surface border border-bunker-border rounded p-4 flex flex-col gap-3">

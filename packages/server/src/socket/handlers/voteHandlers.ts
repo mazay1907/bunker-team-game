@@ -54,6 +54,10 @@ interface VoteHandlerDeps {
 const voteSubmitSchema = z.object({ targetId: z.string().uuid() });
 const skipVoteSchema = z.object({ disconnectedPlayerId: z.string().uuid() });
 
+/** Stored on first handler registration so hostHandlers can trigger completion checks after a kick. */
+let _voteCompletionChecker: ((roomId: string, roundNumber: 1 | 2 | 3) => void) | null = null;
+export const getVoteCompletionChecker = (): typeof _voteCompletionChecker => _voteCompletionChecker;
+
 export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): void {
   const { io, roomStore, roomManager, gsm, voteEngine, timerService } = deps;
 
@@ -210,8 +214,10 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
   /**
    * Checks if all active voters have submitted.
    * For RECONNECTING players: starts a 30-sec hold window, then prompts host.
+   * Stored in module-level var so hostHandlers can call it after a kick.
    */
   function checkVoteCompletion(roomId: string, roundNumber: 1 | 2 | 3): void {
+    if (!_voteCompletionChecker) _voteCompletionChecker = checkVoteCompletion;
     const room = roomStore.getRoom(roomId);
     if (!room || room.currentPhase !== 'VOTE') return;
 

@@ -39,7 +39,9 @@ import type {
   DebateSpeakerChangedPayload,
   PlayerView,
   Game,
+  VoteRecord,
 } from '@bunker/shared';
+import { getVoteCompletionChecker } from './voteHandlers.js';
 import type { IRoomStore } from '../../store/RoomStore.js';
 import type { ContentData } from '../../content/ContentData.js';
 import type { RoomManager } from '../../services/RoomManager.js';
@@ -84,6 +86,36 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     return found;
   }
 
+  // ── 60-second vote timer helper (reused from advanceSpeaker and HOST_FORCE_VOTE) ──
+  const startVoteTimer = (roomId: string): void => {
+    timerService.startDebateTimer(roomId, 60, () => {
+      const r = roomStore.getRoom(roomId);
+      if (!r || r.currentPhase !== 'VOTE') return;
+      io.to(roomId).emit(EVENTS.TIMER_ENDED, {});
+    });
+  };
+
+  // ── Per-speaker advance: restart 60s or transition to VOTE after last speaker ──
+  const advanceSpeaker = (roomId: string): void => {
+    const state = debateSpeakingState.get(roomId);
+    if (!state) return;
+    const r = roomStore.getRoom(roomId);
+    if (!r || r.currentPhase !== 'DEBATE') { debateSpeakingState.delete(roomId); return; }
+
+    const nextIdx = state.currentSpeakerIndex + 1;
+    if (nextIdx >= state.orderedPlayerIds.length) {
+      debateSpeakingState.delete(roomId);
+      const voteState = r.currentRound === 1 ? 'R1_VOTE' : r.currentRound === 2 ? 'R2_VOTE' : 'R3_VOTE';
+      gsm.transitionTo(roomId, voteState);
+      startVoteTimer(roomId);
+    } else {
+      debateSpeakingState.set(roomId, { ...state, currentSpeakerIndex: nextIdx });
+      const changedPayload: DebateSpeakerChangedPayload = { currentSpeakerIndex: nextIdx };
+      io.to(roomId).emit(EVENTS.DEBATE_SPEAKER_CHANGED, changedPayload);
+      timerService.startDebateTimer(roomId, 60, () => advanceSpeaker(roomId));
+    }
+  };
+
   // ── host:kick ─────────────────────────────────────────────────────────────────
   socket.on(EVENTS.HOST_KICK, (raw: unknown, ack: (r: HostKickAck) => void) => {
     const found = getHostRoom();
@@ -111,13 +143,39 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
         return r;
       });
     } else {
-      // In game: mark as KICKED (keeps them in the list as spectator-like)
+      // In game: mark as KICKED
       roomStore.updateRoom(room.roomId, (r) => {
         const p = r.players.get(targetPlayerId);
         if (p) r.players.set(targetPlayerId, { ...p, status: 'KICKED', socketId: null });
         r.lastActivityAt = new Date();
         return r;
       });
+
+      // Workaround: if kicked player hadn't voted yet, auto-abstain so vote can complete
+      if (room.currentPhase === 'VOTE' && room.currentRound !== null) {
+        const round = room.game?.rounds[room.currentRound - 1];
+        if (round) {
+          const isTiebreak = round.tiebreakVotes !== null;
+          const currentVotes = isTiebreak ? round.tiebreakVotes! : round.votes;
+          if (!currentVotes.has(targetPlayerId)) {
+            const abstention: VoteRecord = {
+              voterId: targetPlayerId, targetId: targetPlayerId,
+              submittedAt: new Date(), isAbstention: true,
+            };
+            roomStore.updateRoom(room.roomId, (r) => {
+              const rd = r.game?.rounds[room.currentRound! - 1];
+              if (!rd) return r;
+              if (isTiebreak) {
+                (rd.tiebreakVotes ??= new Map()).set(targetPlayerId, abstention);
+              } else {
+                rd.votes.set(targetPlayerId, abstention);
+              }
+              return r;
+            });
+            getVoteCompletionChecker()?.(room.roomId, room.currentRound);
+          }
+        }
+      }
     }
 
     io.to(room.roomId).emit(EVENTS.PLAYER_LEFT, { playerId: targetPlayerId, newHostId: null });
@@ -250,6 +308,7 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     timerService.cancelTimer(room.roomId);
     debateSpeakingState.delete(room.roomId);
     gsm.advance(room.roomId); // DEBATE → VOTE
+    startVoteTimer(room.roomId);
     return ack({ ok: true });
   });
 
@@ -261,29 +320,23 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
 
     if (room.currentPhase !== 'DEBATE') return ack({ ok: false, error: 'WRONG_PHASE' });
 
-    // Compute circular speaking order for this round (shift by round-1)
-    const roundNumber = room.currentRound ?? 1;
-    const activePlayers = [...room.players.values()]
-      .filter((p) => p.status === 'ACTIVE' || p.status === 'RECONNECTING')
-      .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
-    const shift = (roundNumber - 1) % Math.max(activePlayers.length, 1);
-    const orderedPlayerIds = [
-      ...activePlayers.slice(shift),
-      ...activePlayers.slice(0, shift),
-    ].map((p) => p.playerId);
+    // Randomised speaking order (Fisher-Yates) so each round starts with a different person
+    const active = [...room.players.values()]
+      .filter((p) => p.status === 'ACTIVE' || p.status === 'RECONNECTING');
+    const shuffled = [...active];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+    }
+    const orderedPlayerIds = shuffled.map((p) => p.playerId);
 
     debateSpeakingState.set(room.roomId, { orderedPlayerIds, currentSpeakerIndex: 0 });
 
     const orderPayload: DebateOrderPayload = { orderedPlayerIds, currentSpeakerIndex: 0 };
     io.to(room.roomId).emit(EVENTS.DEBATE_ORDER, orderPayload);
 
-    // Start countdown: 1 minute per active player, no auto-advance to vote
-    const timerSeconds = orderedPlayerIds.length * 60;
-    timerService.startDebateTimer(room.roomId, timerSeconds, () => {
-      const r = roomStore.getRoom(room.roomId);
-      if (!r || r.currentPhase !== 'DEBATE') return;
-      io.to(room.roomId).emit(EVENTS.TIMER_ENDED, {});
-    });
+    // 60s for first speaker; auto-advances on expire
+    timerService.startDebateTimer(room.roomId, 60, () => advanceSpeaker(room.roomId));
 
     return ack({ ok: true });
   });
@@ -295,15 +348,11 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     const { room } = found;
 
     if (room.currentPhase !== 'DEBATE') return ack({ ok: false, error: 'WRONG_PHASE' });
+    if (!debateSpeakingState.has(room.roomId)) return ack({ ok: false, error: 'WRONG_PHASE' });
 
-    const state = debateSpeakingState.get(room.roomId);
-    if (!state) return ack({ ok: false, error: 'WRONG_PHASE' });
-
-    const next = (state.currentSpeakerIndex + 1) % state.orderedPlayerIds.length;
-    debateSpeakingState.set(room.roomId, { ...state, currentSpeakerIndex: next });
-
-    const changedPayload: DebateSpeakerChangedPayload = { currentSpeakerIndex: next };
-    io.to(room.roomId).emit(EVENTS.DEBATE_SPEAKER_CHANGED, changedPayload);
+    // Cancel current speaker's timer and advance immediately
+    timerService.cancelTimer(room.roomId);
+    advanceSpeaker(room.roomId);
 
     return ack({ ok: true });
   });

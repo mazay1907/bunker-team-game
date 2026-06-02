@@ -91,7 +91,10 @@ function TiebreakerModal({
   onVote,
 }: TiebreakerModalProps): JSX.Element {
   const isDecider = ownPlayerId === decidingPlayerId;
-  const tiedPlayers = players.filter((p) => tiedPlayerIds.includes(p.playerId));
+  // Own player excluded — self-vote not allowed even in tiebreaks
+  const tiedPlayers = players.filter(
+    (p) => tiedPlayerIds.includes(p.playerId) && p.playerId !== ownPlayerId,
+  );
   const canVote = (!isHostDeciding || isDecider) && !voted;
 
   return (
@@ -232,11 +235,6 @@ function GameOverScreen(): JSX.Element {
 
         {/* Actions */}
         <div className="flex gap-3 pt-4 border-t border-bunker-border">
-          {isHost && !showEndConfirm && (
-            <button className={btnPrimary + ' flex-1'} onClick={handlePlayAgain}>
-              🔄 {t('end.playAgain')}
-            </button>
-          )}
           {!showEndConfirm && (
             <button
               className="flex-1 h-12 rounded border border-bunker-border text-bunker-muted font-inter hover:border-bunker-hot/50 hover:text-bunker-text transition-colors duration-150"
@@ -519,6 +517,19 @@ function GamePage(): JSX.Element {
 
       {phase === 'VOTE' && (
         <div className="flex flex-col gap-2">
+          {debateTimer !== null && (
+            <div className="flex items-center justify-between">
+              <span className="font-inter text-xs text-bunker-muted">{t('game.debate.timeLeft')}:</span>
+              <span className={[
+                'font-mono font-bold text-xl tabular-nums',
+                debateTimer <= 10 ? 'text-bunker-danger animate-pulse'
+                  : debateTimer <= 30 ? 'text-bunker-danger'
+                  : 'text-bunker-text',
+              ].join(' ')}>
+                {`${String(Math.floor(Math.max(0, debateTimer) / 60)).padStart(2, '0')}:${String(Math.max(0, debateTimer) % 60).padStart(2, '0')}`}
+              </span>
+            </div>
+          )}
           <p className="font-inter text-sm text-bunker-muted">
             {t('game.vote.prompt')}
           </p>
