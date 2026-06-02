@@ -71,6 +71,9 @@ export const EVENTS = {
   VOTE_UPDATE: 'vote:update',
   VOTE_TIEBREAKER: 'vote:tiebreaker',
   PLAYER_ELIMINATED: 'player:eliminated',
+
+  // AI survival prediction (server → client, after game:ended)
+  SURVIVAL_PREDICTION: 'game:survivalPrediction',
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];
@@ -260,6 +263,11 @@ export interface DebateOrderPayload {
 /** Broadcast when host advances the current speaker */
 export interface DebateSpeakerChangedPayload {
   currentSpeakerIndex: number;
+}
+
+/** Sent after the AI webhook responds with a humanity survival prediction */
+export interface SurvivalPredictionPayload {
+  prediction: string;
 }
 
 // ─── HTTP API types ──────────────────────────────────────────────────────────────

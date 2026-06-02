@@ -30,6 +30,7 @@ import type {
   RoomClosedPayload,
   DebateOrderPayload,
   DebateSpeakerChangedPayload,
+  SurvivalPredictionPayload,
 } from '@bunker/shared';
 
 interface ListenerOptions {
@@ -219,6 +220,12 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
       eliminated: payload.eliminated,
       outcomeSummary: payload.outcomeSummary,
     });
+    store.setSurvivalPrediction(null);
+  };
+
+  // ── game:survivalPrediction — AI result arrives async after game ends ────
+  const onSurvivalPrediction = (payload: SurvivalPredictionPayload): void => {
+    store.setSurvivalPrediction(payload.prediction);
   };
 
   // ── timer:tick — debate countdown ─────────────────────────────────────────
@@ -300,6 +307,7 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
   socket.on(EVENTS.VOTE_TIEBREAKER, onVoteTiebreaker);
   socket.on(EVENTS.PLAYER_ELIMINATED, onPlayerEliminated);
   socket.on(EVENTS.GAME_ENDED, onGameEnded);
+  socket.on(EVENTS.SURVIVAL_PREDICTION, onSurvivalPrediction);
   socket.on(EVENTS.TIMER_TICK, onTimerTick);
   socket.on(EVENTS.TIMER_EXTENDED, onTimerExtended);
   socket.on(EVENTS.TIMER_ENDED, onTimerEnded);
@@ -327,6 +335,7 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
     socket.off(EVENTS.VOTE_TIEBREAKER, onVoteTiebreaker);
     socket.off(EVENTS.PLAYER_ELIMINATED, onPlayerEliminated);
     socket.off(EVENTS.GAME_ENDED, onGameEnded);
+    socket.off(EVENTS.SURVIVAL_PREDICTION, onSurvivalPrediction);
     socket.off(EVENTS.TIMER_TICK, onTimerTick);
     socket.off(EVENTS.TIMER_EXTENDED, onTimerExtended);
     socket.off(EVENTS.TIMER_ENDED, onTimerEnded);

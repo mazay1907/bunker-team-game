@@ -15,6 +15,7 @@ import { HelpCircle } from 'lucide-react';
 import { EVENTS, TRAIT_CATEGORIES } from '@bunker/shared';
 import type {
   TraitCategory,
+  TraitSlot,
   RevealSubmitAck,
   VoteSubmitAck,
   HostExtendTimerAck,
@@ -150,27 +151,46 @@ function TiebreakerModal({
 
 // ── GameOver screen ───────────────────────────────────────────────────────────
 
+function SurvivorTraitRow({ trait }: { trait: TraitSlot }): JSX.Element {
+  const catLabel = t(`trait.category.${trait.category}` as Parameters<typeof t>[0]);
+  return (
+    <div className={[
+      'flex items-center gap-2 px-2 py-1.5 rounded',
+      trait.isRevealed
+        ? 'bg-bunker-success/5 border border-bunker-success/20'
+        : 'bg-bunker-hot/5 border border-bunker-hot/20',
+    ].join(' ')}>
+      <span className="font-inter text-xs text-bunker-muted/70 w-20 shrink-0">{catLabel}</span>
+      <span className={[
+        'font-inter text-sm flex-1',
+        trait.isRevealed ? 'text-bunker-text' : 'text-bunker-text/80',
+      ].join(' ')}>{trait.value}</span>
+      <span className={[
+        'font-inter text-xs px-1.5 py-0.5 rounded shrink-0',
+        trait.isRevealed
+          ? 'bg-bunker-success/15 text-bunker-success'
+          : 'bg-bunker-hot/15 text-bunker-hot',
+      ].join(' ')}>
+        {trait.isRevealed ? t('end.traitRevealed') : t('end.traitHidden')}
+      </span>
+    </div>
+  );
+}
+
 function GameOverScreen(): JSX.Element {
   const navigate = useNavigate();
-  const { gameEnded, ownPlayerId, players } = useGameStore();
+  const { gameEnded, ownPlayerId, players, survivalPrediction } = useGameStore();
   const room = useGameStore((s) => s.room);
   const ownPlayer = players.find((p) => p.playerId === ownPlayerId);
   const isHost = ownPlayer?.isHost ?? false;
-  const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const scenario = room?.scenario ?? null;
 
   if (!gameEnded) return <></>;
 
   const isEarlyEnd = gameEnded.reason === 'HOST_ENDED_EARLY';
 
-  const handlePlayAgain = (): void => {
-    socket.emit(EVENTS.HOST_PLAY_AGAIN, (ack: { ok: boolean }) => {
-      if (ack.ok) navigate(`/r/${room?.roomCode ?? ''}`);
-    });
-  };
-
   const handleFinish = (): void => {
     if (isHost) {
-      // Host ends session: server cleans up room and emits room:closed to all
       socket.emit(EVENTS.HOST_END_SESSION, (ack: HostEndSessionAck) => {
         if (!ack.ok) console.error('endSession error:', ack.error);
       });
@@ -187,23 +207,38 @@ function GameOverScreen(): JSX.Element {
       </header>
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8 flex flex-col gap-8">
-        <p className="font-inter text-bunker-muted text-center">{gameEnded.outcomeSummary}</p>
+
+        {/* Scenario / catastrophe */}
+        {scenario && !isEarlyEnd && (
+          <div className="bg-bunker-surface border border-bunker-border rounded p-4 flex flex-col gap-2">
+            <p className="font-oswald font-semibold text-xs text-bunker-muted uppercase tracking-wider">
+              {t('end.catastrophe')}
+            </p>
+            <p className="font-oswald font-bold text-lg text-bunker-hot">{scenario.title}</p>
+            <p className="font-inter text-sm text-bunker-text/80 leading-relaxed">{scenario.description}</p>
+            <p className="font-inter text-xs text-bunker-muted mt-1">
+              {t('end.yearsInBunker')}: <span className="text-bunker-text">{scenario.bunkerConditions.supplyDuration}</span>
+            </p>
+          </div>
+        )}
 
         {/* Survivors */}
         <div>
           <h2 className="font-oswald font-bold text-xl text-bunker-success uppercase tracking-wider mb-3">
             🏠 {t('end.survivors')}
           </h2>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             {gameEnded.survivors.map((p) => (
-              <div key={p.playerId} className="p-3 rounded border border-bunker-success/30 bg-bunker-success/5">
-                <p className="font-inter font-medium text-bunker-text">{p.nickname}</p>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {p.visibleTraits.map((trait) => (
-                    <span key={trait.category} className="font-inter text-xs px-2 py-0.5 rounded bg-bunker-bg border border-bunker-border/50 text-bunker-muted">
-                      {trait.value}
-                    </span>
-                  ))}
+              <div key={p.playerId} className="rounded border border-bunker-success/30 bg-bunker-success/5 overflow-hidden">
+                <div className="px-3 py-2 border-b border-bunker-success/20">
+                  <p className="font-oswald font-bold text-base text-bunker-text">{p.nickname}</p>
+                </div>
+                <div className="p-2 flex flex-col gap-1">
+                  {TRAIT_CATEGORIES.map((cat) => {
+                    const trait = p.visibleTraits.find((tr) => tr.category === cat);
+                    if (!trait) return null;
+                    return <SurvivorTraitRow key={cat} trait={trait} />;
+                  })}
                 </div>
               </div>
             ))}
@@ -219,8 +254,8 @@ function GameOverScreen(): JSX.Element {
             <div className="flex flex-col gap-2">
               {gameEnded.eliminated.map((p) => (
                 <div key={p.playerId} className="p-3 rounded border border-bunker-border/30 bg-bunker-surface/30 opacity-70">
-                  <p className="font-inter font-medium text-bunker-muted line-through">{p.nickname}</p>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
+                  <p className="font-inter font-medium text-bunker-muted line-through mb-2">{p.nickname}</p>
+                  <div className="flex flex-wrap gap-1.5">
                     {p.visibleTraits.map((trait) => (
                       <span key={trait.category} className="font-inter text-xs px-2 py-0.5 rounded bg-bunker-bg border border-bunker-border/30 text-bunker-muted/60">
                         {trait.value}
@@ -233,16 +268,30 @@ function GameOverScreen(): JSX.Element {
           </div>
         )}
 
+        {/* AI survival prediction */}
+        {!isEarlyEnd && (
+          <div className="bg-bunker-surface border border-bunker-border rounded p-4 flex flex-col gap-3">
+            <p className="font-oswald font-semibold text-xs text-bunker-muted uppercase tracking-wider">
+              {t('end.survivalPrediction')}
+            </p>
+            {survivalPrediction ? (
+              <p className="font-inter text-sm text-bunker-text leading-relaxed">{survivalPrediction}</p>
+            ) : (
+              <p className="font-inter text-sm text-bunker-muted/60 animate-pulse">
+                {t('end.predictionLoading')}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
-        <div className="flex gap-3 pt-4 border-t border-bunker-border">
-          {!showEndConfirm && (
-            <button
-              className="flex-1 h-12 rounded border border-bunker-border text-bunker-muted font-inter hover:border-bunker-hot/50 hover:text-bunker-text transition-colors duration-150"
-              onClick={handleFinish}
-            >
-              {t('end.finish')}
-            </button>
-          )}
+        <div className="pt-4 border-t border-bunker-border">
+          <button
+            className="w-full h-12 rounded border border-bunker-border text-bunker-muted font-inter hover:border-bunker-hot/50 hover:text-bunker-text transition-colors duration-150"
+            onClick={handleFinish}
+          >
+            {t('end.finish')}
+          </button>
         </div>
       </main>
     </div>

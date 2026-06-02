@@ -89,6 +89,12 @@
   "end.earlyEnd": "Гру завершено достроково",
   "end.thankYou": "Дякуємо за гру",
   "end.createNew": "Створити нову кімнату",
+  "end.catastrophe": "Катаклізм",
+  "end.yearsInBunker": "Запаси бункера",
+  "end.traitRevealed": "розкрито",
+  "end.traitHidden": "таємниця",
+  "end.survivalPrediction": "Прогноз виживання людства",
+  "end.predictionLoading": "Аналізуємо шанси на виживання…",
 
   "scenario.pick.title": "Виберіть сценарій",
   "scenario.pick.random": "Випадково",

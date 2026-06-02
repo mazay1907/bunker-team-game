@@ -79,6 +79,9 @@ interface GameState {
     outcomeSummary: string;
   } | null;
 
+  // AI survival prediction (arrives async after game:ended)
+  survivalPrediction: string | null;
+
   // Actions — called by socket event handlers
   setConnectionState: (state: ConnectionState) => void;
   setRoom: (room: RoomView | null) => void;
@@ -102,6 +105,7 @@ interface GameState {
   setRevealWaitingFor: (count: number) => void;
   addRevealSubmitted: (playerId: string) => void;
   setGameEnded: (payload: GameState['gameEnded']) => void;
+  setSurvivalPrediction: (prediction: string | null) => void;
   reset: () => void;
   resetRound: () => void;
 }
@@ -128,6 +132,7 @@ const initialState = {
   lastError: null,
   isRevealed: false,
   gameEnded: null,
+  survivalPrediction: null,
 };
 
 export const useGameStore = create<GameState>((set) => ({
@@ -196,6 +201,8 @@ export const useGameStore = create<GameState>((set) => ({
     })),
 
   setGameEnded: (gameEnded) => set({ gameEnded }),
+
+  setSurvivalPrediction: (survivalPrediction) => set({ survivalPrediction }),
 
   resetRound: () =>
     set({
