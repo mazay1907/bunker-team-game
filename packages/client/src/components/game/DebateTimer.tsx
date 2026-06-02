@@ -23,6 +23,7 @@ interface DebateTimerProps {
   remaining: number | null;
   timerEnded: boolean;
   isHost: boolean;
+  isCurrentSpeaker: boolean;
   speakingOrder: Speaker[];
   currentSpeakerIndex: number;
   onStartTimer: () => void;
@@ -42,6 +43,7 @@ export function DebateTimer({
   remaining,
   timerEnded,
   isHost,
+  isCurrentSpeaker,
   speakingOrder,
   currentSpeakerIndex,
   onStartTimer,
@@ -131,7 +133,7 @@ export function DebateTimer({
             <p className="font-inter text-xs text-bunker-muted uppercase tracking-[0.06em]">
               {t('game.debate.speakingOrder')}
             </p>
-            {isHost && (
+            {(isHost || isCurrentSpeaker) && (
               <button
                 className="h-7 px-2 rounded border border-bunker-border text-bunker-muted font-inter text-xs hover:border-bunker-hot/50 hover:text-bunker-text transition-colors duration-150"
                 onClick={onNextSpeaker}

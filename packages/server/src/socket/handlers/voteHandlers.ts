@@ -354,12 +354,22 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
       };
       io.to(roomId).emit(EVENTS.VOTE_TIEBREAKER, tiebreakerPayload);
 
-      // Reset tiebreak votes — decider picks from the same candidates
+      // Reset tiebreak votes with auto-abstentions for everyone except the decider.
+      // checkVoteCompletion waits for all active players — pre-filling abstentions means
+      // the game unblocks as soon as the single decider submits their vote.
       roomStore.updateRoom(roomId, (r) => {
         const rd = r.game?.rounds[roundNumber - 1];
-        if (rd) {
-          rd.tiebreakVotes = new Map();
-          rd.tiebreakCandidateIds = leaders;
+        if (!rd) return r;
+        rd.tiebreakVotes = new Map();
+        rd.tiebreakCandidateIds = leaders;
+        const now = new Date();
+        for (const [pid, player] of r.players) {
+          if (pid === deciderId) continue;
+          if (player.status !== 'ACTIVE' && player.status !== 'RECONNECTING') continue;
+          const abstention: VoteRecord = {
+            voterId: pid, targetId: pid, submittedAt: now, isAbstention: true,
+          };
+          rd.tiebreakVotes.set(pid, abstention);
         }
         return r;
       });

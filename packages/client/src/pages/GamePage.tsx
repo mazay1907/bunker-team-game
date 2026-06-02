@@ -597,6 +597,10 @@ function GamePage(): JSX.Element {
           remaining={debateTimer}
           timerEnded={debateTimerEnded}
           isHost={isHost}
+          isCurrentSpeaker={
+            !!ownPlayerId &&
+            debateSpeakingOrder[debateCurrentSpeakerIndex] === ownPlayerId
+          }
           speakingOrder={debateSpeakingOrder.map((id) => ({
             playerId: id,
             nickname: players.find((p) => p.playerId === id)?.nickname ?? id,

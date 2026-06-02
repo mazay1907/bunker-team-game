@@ -241,9 +241,10 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
     store.setDebateSpeakingOrder(payload.orderedPlayerIds, payload.currentSpeakerIndex);
   };
 
-  // ── debate:speakerChanged — host advanced the speaker ────────────────────
+  // ── debate:speakerChanged — speaker advanced, clear ended state for new timer ─
   const onDebateSpeakerChanged = (payload: DebateSpeakerChangedPayload): void => {
     store.setDebateCurrentSpeakerIndex(payload.currentSpeakerIndex);
+    store.setDebateTimerEnded(false);
   };
 
   // ── host:transferred — host role changed ─────────────────────────────────

@@ -53,7 +53,11 @@ import { emitAnalytics } from '../../services/Analytics.js';
 import { startRevealPhaseTimer } from './revealHandlers.js';
 
 /** Server-side speaking order state per room — not in shared types */
-const debateSpeakingState = new Map<string, { orderedPlayerIds: string[]; currentSpeakerIndex: number }>();
+const debateSpeakingState = new Map<string, {
+  orderedPlayerIds: string[];
+  currentSpeakerIndex: number;
+  waitingForNext: boolean; // true after timer expired — waiting for manual "Next" click
+}>();
 
 interface HostHandlerDeps {
   io: Server;
@@ -95,7 +99,17 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     });
   };
 
-  // ── Per-speaker advance: restart 60s or transition to VOTE after last speaker ──
+  // ── Speaker timer expired — show signal, wait for manual "Next" ──────────────
+  const onSpeakerTimerExpired = (roomId: string): void => {
+    const state = debateSpeakingState.get(roomId);
+    if (!state) return;
+    const r = roomStore.getRoom(roomId);
+    if (!r || r.currentPhase !== 'DEBATE') { debateSpeakingState.delete(roomId); return; }
+    debateSpeakingState.set(roomId, { ...state, waitingForNext: true });
+    io.to(roomId).emit(EVENTS.TIMER_ENDED, {});
+  };
+
+  // ── Advance to next speaker (or transition to VOTE after last) ────────────────
   const advanceSpeaker = (roomId: string): void => {
     const state = debateSpeakingState.get(roomId);
     if (!state) return;
@@ -109,10 +123,10 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
       gsm.transitionTo(roomId, voteState);
       startVoteTimer(roomId);
     } else {
-      debateSpeakingState.set(roomId, { ...state, currentSpeakerIndex: nextIdx });
+      debateSpeakingState.set(roomId, { ...state, currentSpeakerIndex: nextIdx, waitingForNext: false });
       const changedPayload: DebateSpeakerChangedPayload = { currentSpeakerIndex: nextIdx };
       io.to(roomId).emit(EVENTS.DEBATE_SPEAKER_CHANGED, changedPayload);
-      timerService.startDebateTimer(roomId, 60, () => advanceSpeaker(roomId));
+      timerService.startDebateTimer(roomId, 60, () => onSpeakerTimerExpired(roomId));
     }
   };
 
@@ -330,27 +344,38 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     }
     const orderedPlayerIds = shuffled.map((p) => p.playerId);
 
-    debateSpeakingState.set(room.roomId, { orderedPlayerIds, currentSpeakerIndex: 0 });
+    debateSpeakingState.set(room.roomId, { orderedPlayerIds, currentSpeakerIndex: 0, waitingForNext: false });
 
     const orderPayload: DebateOrderPayload = { orderedPlayerIds, currentSpeakerIndex: 0 };
     io.to(room.roomId).emit(EVENTS.DEBATE_ORDER, orderPayload);
 
-    // 60s for first speaker; auto-advances on expire
-    timerService.startDebateTimer(room.roomId, 60, () => advanceSpeaker(room.roomId));
+    // 60s for first speaker; on expire: show signal and wait for manual "Next"
+    timerService.startDebateTimer(room.roomId, 60, () => onSpeakerTimerExpired(room.roomId));
 
     return ack({ ok: true });
   });
 
-  // ── host:nextSpeaker ──────────────────────────────────────────────────────────
+  // ── host:nextSpeaker — allowed for host OR current speaker ───────────────────
   socket.on(EVENTS.HOST_NEXT_SPEAKER, (ack: (r: HostNextSpeakerAck) => void) => {
-    const found = getHostRoom();
+    const playerId: string | undefined = socket.data.playerId;
+    if (!playerId) return ack({ ok: false, error: 'NOT_HOST' });
+
+    const found = roomManager.findPlayerById(playerId);
     if (!found) return ack({ ok: false, error: 'NOT_HOST' });
     const { room } = found;
 
     if (room.currentPhase !== 'DEBATE') return ack({ ok: false, error: 'WRONG_PHASE' });
-    if (!debateSpeakingState.has(room.roomId)) return ack({ ok: false, error: 'WRONG_PHASE' });
 
-    // Cancel current speaker's timer and advance immediately
+    const speakingState = debateSpeakingState.get(room.roomId);
+    if (!speakingState) return ack({ ok: false, error: 'WRONG_PHASE' });
+
+    const isHost = room.hostPlayerId === playerId;
+    const currentSpeakerId = speakingState.orderedPlayerIds[speakingState.currentSpeakerIndex];
+    const isCurrentSpeaker = currentSpeakerId === playerId;
+
+    if (!isHost && !isCurrentSpeaker) return ack({ ok: false, error: 'NOT_HOST' });
+
+    // Cancel running timer (if any) and advance to next speaker
     timerService.cancelTimer(room.roomId);
     advanceSpeaker(room.roomId);
 
