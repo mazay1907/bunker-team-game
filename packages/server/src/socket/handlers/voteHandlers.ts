@@ -94,8 +94,15 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
       if (targetId === playerId) return ack({ ok: false, error: 'SELF_VOTE' });
 
       // Validate already voted (different Map for tiebreak)
+      // One vote change is allowed per player per round (not in tiebreak).
       const activeVotes = isTiebreak ? round.tiebreakVotes! : round.votes;
-      if (activeVotes.has(playerId)) return ack({ ok: false, error: 'ALREADY_VOTED' });
+      const alreadyVoted = activeVotes.has(playerId);
+      if (alreadyVoted) {
+        if (isTiebreak || round.voteChangesUsed.has(playerId)) {
+          return ack({ ok: false, error: 'ALREADY_VOTED' });
+        }
+        // First change is allowed — continue to update vote
+      }
 
       // Validate target is eligible
       if (!voteEngine.isValidVoteTarget(playerId, targetId, room, allowedIds)) {
@@ -110,7 +117,7 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
         isAbstention: false,
       };
 
-      // Persist vote
+      // Persist vote (replaces existing if changing)
       roomStore.updateRoom(room.roomId, (r) => {
         const rd = r.game?.rounds[room.currentRound! - 1];
         if (!rd) return r;
@@ -119,6 +126,9 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
           rd.tiebreakVotes.set(playerId, record);
         } else {
           rd.votes.set(playerId, record);
+          if (alreadyVoted) {
+            rd.voteChangesUsed.add(playerId);
+          }
         }
         r.lastActivityAt = now;
         return r;

@@ -9,10 +9,10 @@
  * - Redirect to game once R1_REVEAL begins
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Copy, Check, Crown, X, Users, HelpCircle } from 'lucide-react';
-import { socket, RECONNECT_TOKEN_KEY, SESSION_TOKEN_KEY, claimSession } from '../socket/socket.js';
+import { socket, RECONNECT_TOKEN_KEY, SESSION_TOKEN_KEY, getCookie, setCookie, claimSession } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type {
@@ -51,10 +51,11 @@ const btnDanger =
 
 interface ScenarioPickerProps {
   isHost: boolean;
+  playerCount: number;
   onPick: (scenarioId: string) => void;
 }
 
-function ScenarioPicker({ isHost, onPick }: ScenarioPickerProps): JSX.Element {
+function ScenarioPicker({ isHost, playerCount, onPick }: ScenarioPickerProps): JSX.Element {
   const scenarios = useGameStore((s) => s.availableScenarios);
   const [selected, setSelected] = useState<string | null>(null);
   const [isPicking, setIsPicking] = useState(false);
@@ -122,7 +123,7 @@ function ScenarioPicker({ isHost, onPick }: ScenarioPickerProps): JSX.Element {
                 {s.description}
               </p>
               <div className="flex gap-4 mt-2 text-xs text-bunker-muted/70 font-mono">
-                <span>{t('game.capacity')}: {s.bunkerConditions.capacity}</span>
+                <span>{t('game.capacity')}: {Math.max(playerCount - 3, 1)}</span>
                 <span>{t('game.supplyDuration')}: {s.bunkerConditions.supplyDuration}</span>
               </div>
             </button>
@@ -151,12 +152,16 @@ function LobbyPage(): JSX.Element {
 
   const {
     room, players, ownPlayerId, availableScenarios,
-    setRoom, setPlayers, setOwnPlayer, setLastError, lastError,
+    setOwnPlayer, setLastError, lastError,
   } = useGameStore();
 
   const [isJoining, setIsJoining] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
+  const [needsNickname, setNeedsNickname] = useState(false);
+  const [directNickname, setDirectNickname] = useState('');
+  const isFreshJoin = useRef(false);
+  const joinCalledRef = useRef(false);
 
   // Navigate to game when game starts
   useEffect(() => {
@@ -174,6 +179,47 @@ function LobbyPage(): JSX.Element {
     }
   }, [room?.state, roomCode, navigate]);
 
+  const doJoin = useCallback(async (joiningNickname: string): Promise<void> => {
+    setIsJoining(true);
+
+    if (!socket.connected) {
+      socket.connect();
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('connect timeout')), 5000);
+        socket.once('connect', () => { clearTimeout(timeout); resolve(); });
+        socket.once('connect_error', (err) => { clearTimeout(timeout); reject(err); });
+      });
+    }
+
+    const sessionToken = getCookie(SESSION_TOKEN_KEY);
+    const payload: RoomJoinPayload = {
+      roomCode: (roomCode ?? '').toUpperCase(),
+      nickname: joiningNickname,
+      sessionToken,
+    };
+
+    await new Promise<void>((resolve) => {
+      socket.emit(EVENTS.ROOM_JOIN, payload, (ack: RoomJoinAck) => {
+        if (ack.ok) {
+          // room:state event (sent by server before this ack) sets room + players
+          // — we only need to update identity and persist the reconnect token here.
+          setOwnPlayer(ack.player.playerId, ack.player.nickname);
+          setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+          // Only claim session on reconnect — fresh joins must not displace another tab's session
+          if (!isFreshJoin.current) {
+            claimSession();
+          }
+        } else {
+          const errKey = `error.${ack.error}` as Parameters<typeof t>[0];
+          setLastError(t(errKey));
+        }
+        resolve();
+      });
+    });
+
+    setIsJoining(false);
+  }, [roomCode, setOwnPlayer, setLastError]);
+
   useEffect(() => {
     if (!roomCode) { navigate('/'); return; }
 
@@ -184,48 +230,29 @@ function LobbyPage(): JSX.Element {
     });
 
     const nickname = locationState?.nickname;
-    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    const reconnectToken = getCookie(RECONNECT_TOKEN_KEY);
 
-    const joinRoom = async (): Promise<void> => {
-      setIsJoining(true);
+    // Host navigated here from HomePage — already joined, just watch for events
+    const storeState = useGameStore.getState();
+    if (storeState.ownPlayerId && storeState.room) {
+      return cleanup;
+    }
 
-      if (!socket.connected) {
-        socket.connect();
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => reject(new Error('connect timeout')), 5000);
-          socket.once('connect', () => { clearTimeout(timeout); resolve(); });
-          socket.once('connect_error', (err) => { clearTimeout(timeout); reject(err); });
-        });
-      }
-      // Tell other tabs that this tab is claiming the session
-      claimSession();
+    if (!nickname && !reconnectToken) {
+      // New user arrived via shared link — show inline name-entry form
+      setNeedsNickname(true);
+      return cleanup;
+    }
 
-      const payload: RoomJoinPayload = {
-        roomCode: roomCode.toUpperCase(),
-        nickname: nickname ?? '',
-        sessionToken,
-      };
+    // Prevent React StrictMode double-invocation from sending two joins
+    if (joinCalledRef.current) return cleanup;
+    joinCalledRef.current = true;
 
-      await new Promise<void>((resolve) => {
-        socket.emit(EVENTS.ROOM_JOIN, payload, (ack: RoomJoinAck) => {
-          if (ack.ok) {
-            setRoom(ack.room);
-            setPlayers([ack.player]);
-            if (nickname) setOwnPlayer(ack.player.playerId, nickname);
-            localStorage.setItem(RECONNECT_TOKEN_KEY, ack.reconnectToken);
-          } else {
-            // Show error inline — do not navigate away so the user sees a clear error page
-            const errKey = `error.${ack.error}` as Parameters<typeof t>[0];
-            setLastError(t(errKey));
-          }
-          resolve();
-        });
-      });
+    if (nickname) {
+      isFreshJoin.current = true;
+    }
 
-      setIsJoining(false);
-    };
-
-    void joinRoom().catch((err: unknown) => {
+    void doJoin(nickname ?? '').catch((err: unknown) => {
       console.error('[LobbyPage] join error:', err);
       setLastError(t('error.networkError'));
       setIsJoining(false);
@@ -257,11 +284,60 @@ function LobbyPage(): JSX.Element {
     });
   }, [setLastError]);
 
+  const handleDirectJoin = useCallback((): void => {
+    const trimmed = directNickname.trim();
+    if (trimmed.length < 2) return;
+    isFreshJoin.current = true;
+    setNeedsNickname(false);
+    void doJoin(trimmed).catch((err: unknown) => {
+      console.error('[LobbyPage] direct join error:', err);
+      setLastError(t('error.networkError'));
+      setIsJoining(false);
+    });
+  }, [directNickname, doJoin, setLastError]);
+
   const ownPlayer = players.find((p) => p.playerId === ownPlayerId);
   const isHost = ownPlayer?.isHost ?? false;
   const playerCount = players.length;
   const canStart = playerCount >= 6 && playerCount <= 10;
   const isScenarioPick = room?.state === 'SCENARIO_PICK';
+
+  if (needsNickname) {
+    return (
+      <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
+        <div className="bg-bunker-surface border border-bunker-border rounded p-8 max-w-sm w-full mx-4 animate-[fade-in_300ms_ease-out]">
+          <div className="text-center mb-6">
+            <div className="text-4xl mb-2">☢</div>
+            <h1 className="font-oswald font-bold text-2xl text-bunker-hot uppercase tracking-wider">
+              {t('lobby.enterNicknameTitle')}
+            </h1>
+            <p className="font-inter text-sm text-bunker-muted mt-2">
+              {t('lobby.roomLabel')}: <span className="font-mono text-bunker-text tracking-[0.15em]">{roomCode}</span>
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <input
+              type="text"
+              value={directNickname}
+              onChange={(e) => setDirectNickname(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleDirectJoin(); }}
+              placeholder={t('home.nicknamePlaceholder')}
+              maxLength={20}
+              autoFocus
+              className="w-full h-14 px-4 bg-bunker-bg border border-bunker-border rounded font-inter text-base text-bunker-text placeholder:text-bunker-muted focus:outline-none focus:border-bunker-hot focus:ring-2 focus:ring-bunker-hot/20 transition-colors duration-150"
+            />
+            <button
+              className={btnPrimary}
+              disabled={directNickname.trim().length < 2}
+              onClick={handleDirectJoin}
+            >
+              {t('lobby.joinButton')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isJoining) {
     return (
@@ -309,15 +385,18 @@ function LobbyPage(): JSX.Element {
 
       {/* Scenario picker modal */}
       {isScenarioPick && availableScenarios.length > 0 && (
-        <ScenarioPicker isHost={isHost} onPick={() => void 0} />
+        <ScenarioPicker isHost={isHost} playerCount={playerCount} onPick={() => void 0} />
       )}
 
       {/* Header */}
       <header className="border-b border-bunker-border bg-bunker-surface/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-3 md:px-4 py-2 md:py-3 flex items-center justify-between gap-2 md:gap-4">
-          <span className="font-oswald font-bold text-lg md:text-xl text-bunker-hot uppercase tracking-wider shrink-0">
+          <button
+            className="font-oswald font-bold text-lg md:text-xl text-bunker-hot uppercase tracking-wider shrink-0 hover:text-bunker-glow transition-colors duration-150"
+            onClick={() => navigate('/')}
+          >
             БУНКЕР
-          </span>
+          </button>
           <div className="flex items-center gap-1.5 md:gap-2 min-w-0">
             <span className="hidden sm:inline font-inter text-sm text-bunker-muted shrink-0">{t('lobby.roomCode')}:</span>
             <span className="font-mono font-bold text-base md:text-lg text-bunker-text tracking-[0.2em] shrink-0">

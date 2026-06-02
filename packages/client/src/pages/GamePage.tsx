@@ -20,8 +20,11 @@ import type {
   HostExtendTimerAck,
   HostForceVoteAck,
   HostEndGameAck,
+  HostKickAck,
   HostSkipVoteAck,
   HostEndSessionAck,
+  HostStartDebateTimerAck,
+  HostNextSpeakerAck,
 } from '@bunker/shared';
 import { socket } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
@@ -72,6 +75,7 @@ interface TiebreakerModalProps {
   decidingPlayerId: string | null;
   ownPlayerId: string | null;
   players: PlayerView[];
+  voted: boolean;
   onVote: (targetId: string) => void;
 }
 
@@ -81,10 +85,12 @@ function TiebreakerModal({
   decidingPlayerId,
   ownPlayerId,
   players,
+  voted,
   onVote,
 }: TiebreakerModalProps): JSX.Element {
   const isDecider = ownPlayerId === decidingPlayerId;
   const tiedPlayers = players.filter((p) => tiedPlayerIds.includes(p.playerId));
+  const canVote = (!isHostDeciding || isDecider) && !voted;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
@@ -107,7 +113,7 @@ function TiebreakerModal({
           )}
         </div>
 
-        {(!isHostDeciding || isDecider) && (
+        {canVote && (
           <div className="flex flex-col gap-3">
             {tiedPlayers.map((player) => (
               <button
@@ -121,7 +127,13 @@ function TiebreakerModal({
           </div>
         )}
 
-        {isHostDeciding && !isDecider && (
+        {voted && (
+          <p className="text-center font-inter text-bunker-success text-sm">
+            ✓ {t('game.vote.voteCounted')}
+          </p>
+        )}
+
+        {isHostDeciding && !isDecider && !voted && (
           <p className="text-center font-inter text-bunker-muted text-sm">
             {t('game.tiebreaker.waitingDecision')}
           </p>
@@ -248,8 +260,9 @@ function GamePage(): JSX.Element {
   const navigate = useNavigate();
 
   const {
-    room, players, ownCharacter, ownPlayerId,
-    debateTimer, tiebreaker, isRevealed, votes, voteTally, gameEnded,
+    room, players, ownCharacter, ownPlayerId, ownNickname,
+    debateTimer, debateTimerEnded, debateSpeakingOrder, debateCurrentSpeakerIndex,
+    tiebreaker, isRevealed, votes, voteTally, gameEnded,
     disconnectedVoterPrompt, setDisconnectedVoterPrompt,
     revealWaitingFor,
   } = useGameStore();
@@ -257,6 +270,8 @@ function GamePage(): JSX.Element {
   const [selectedCats, setSelectedCats] = useState<TraitCategory[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [hasVoted, setHasVoted] = useState(false);
+  const [voteChangeUsed, setVoteChangeUsed] = useState(false);
+  const [tiebreakerVoted, setTiebreakerVoted] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>('card');
@@ -274,7 +289,17 @@ function GamePage(): JSX.Element {
     setSelectedCats([]);
     setSubmitError(null);
     setHasVoted(false);
+    setVoteChangeUsed(false);
+    setTiebreakerVoted(false);
   }, [room?.currentPhase, room?.currentRound]);
+
+  // Reset tiebreaker vote state when a new tiebreak starts
+  useEffect(() => {
+    if (tiebreaker) {
+      setHasVoted(false);
+      setTiebreakerVoted(false);
+    }
+  }, [tiebreaker]);
 
   if (!room || gameEnded) {
     if (gameEnded) return <GameOverScreen />;
@@ -312,10 +337,14 @@ function GamePage(): JSX.Element {
   }, [quota]);
 
   // ── Vote submit ──────────────────────────────────────────────────────────
-  const handleVote = useCallback((targetId: string): void => {
+  const handleVote = useCallback((targetId: string, isTiebreak = false): void => {
     socket.emit(EVENTS.VOTE_SUBMIT, { targetId }, (ack: VoteSubmitAck) => {
       if (ack.ok) {
-        setHasVoted(true);
+        if (isTiebreak) {
+          setTiebreakerVoted(true);
+        } else {
+          setHasVoted(true);
+        }
       } else {
         const errKey = `error.${ack.error}` as Parameters<typeof t>[0];
         setSubmitError(t(errKey));
@@ -340,6 +369,24 @@ function GamePage(): JSX.Element {
     socket.emit(EVENTS.HOST_END_GAME, (ack: HostEndGameAck) => {
       if (!ack.ok) console.error('end game error:', ack.error);
       setShowEndConfirm(false);
+    });
+  }, []);
+
+  const handleKick = useCallback((targetPlayerId: string): void => {
+    socket.emit(EVENTS.HOST_KICK, { targetPlayerId }, (ack: HostKickAck) => {
+      if (!ack.ok) console.error('kick error:', ack.error);
+    });
+  }, []);
+
+  const handleStartDebateTimer = useCallback((): void => {
+    socket.emit(EVENTS.HOST_START_DEBATE_TIMER, (ack: HostStartDebateTimerAck) => {
+      if (!ack.ok) console.error('start debate timer error:', ack.error);
+    });
+  }, []);
+
+  const handleNextSpeaker = useCallback((): void => {
+    socket.emit(EVENTS.HOST_NEXT_SPEAKER, (ack: HostNextSpeakerAck) => {
+      if (!ack.ok) console.error('next speaker error:', ack.error);
     });
   }, []);
 
@@ -411,12 +458,22 @@ function GamePage(): JSX.Element {
             {t('game.vote.prompt')}
           </p>
           {hasVoted && (
-            <p className="font-inter text-xs text-bunker-success">
-              {t('game.vote.voteCounted')}
-              {voteWaitingFor > 0 && (
-                <span className="text-bunker-muted"> {t('game.vote.waiting', { count: voteWaitingFor })}</span>
+            <div className="flex items-center gap-3">
+              <p className="font-inter text-xs text-bunker-success flex-1">
+                {t('game.vote.voteCounted')}
+                {voteWaitingFor > 0 && (
+                  <span className="text-bunker-muted"> {t('game.vote.waiting', { count: voteWaitingFor })}</span>
+                )}
+              </p>
+              {!voteChangeUsed && (
+                <button
+                  className="h-8 px-3 rounded border border-bunker-border text-bunker-muted font-inter text-xs hover:border-bunker-hot/50 hover:text-bunker-text transition-colors duration-150 shrink-0"
+                  onClick={() => { setHasVoted(false); setVoteChangeUsed(true); }}
+                >
+                  {t('game.vote.changeVote')}
+                </button>
               )}
-            </p>
+            </div>
           )}
           {!hasVoted && submitError && (
             <p className="font-inter text-xs text-bunker-danger">{submitError}</p>
@@ -429,15 +486,20 @@ function GamePage(): JSX.Element {
   // ── Left column content (my card) ─────────────────────────────────────────
   const cardColumn = (
     <div className="flex flex-col gap-4">
-      {scenario && <ScenarioCard scenario={scenario} />}
+      {scenario && <ScenarioCard scenario={scenario} playerCount={players.length} />}
       {isSpectator ? (
-        <div className="bg-bunker-surface border border-bunker-border rounded p-4 text-center">
-          <p className="font-oswald text-xl text-bunker-muted">
-            {t('game.eliminated.spectator')}
-          </p>
-          <p className="font-inter text-sm text-bunker-muted/60 mt-1">
-            {t('game.spectatorWatching')}
-          </p>
+        <div className="flex flex-col gap-4">
+          <div className="bg-bunker-surface border border-bunker-border rounded p-4 text-center">
+            <p className="font-oswald text-xl text-bunker-muted">
+              {t('game.eliminated.spectator')}
+            </p>
+            <p className="font-inter text-sm text-bunker-muted/60 mt-1">
+              {t('game.spectatorWatching')}
+            </p>
+          </div>
+          {ownCharacter && (
+            <OwnCharacterCard character={ownCharacter} showOnlyRevealed={false} />
+          )}
         </div>
       ) : ownCharacter ? (
         <OwnCharacterCard
@@ -445,6 +507,7 @@ function GamePage(): JSX.Element {
           selectableCategories={phase === 'REVEAL' && !isRevealed ? selectableCats : undefined}
           selectedCategories={selectedCats}
           onToggle={phase === 'REVEAL' && !isRevealed ? toggleCat : undefined}
+          showOnlyRevealed={phase !== 'REVEAL'}
         />
       ) : null}
     </div>
@@ -456,9 +519,17 @@ function GamePage(): JSX.Element {
       {phase === 'DEBATE' && (
         <DebateTimer
           remaining={debateTimer}
+          timerEnded={debateTimerEnded}
           isHost={isHost}
+          speakingOrder={debateSpeakingOrder.map((id) => ({
+            playerId: id,
+            nickname: players.find((p) => p.playerId === id)?.nickname ?? id,
+          }))}
+          currentSpeakerIndex={debateCurrentSpeakerIndex}
+          onStartTimer={handleStartDebateTimer}
           onExtend={handleExtendTimer}
           onForceVote={handleForceVote}
+          onNextSpeaker={handleNextSpeaker}
         />
       )}
 
@@ -473,10 +544,16 @@ function GamePage(): JSX.Element {
         players={players}
         ownPlayerId={ownPlayerId}
         voteTally={voteTally}
+        showVoteTally={voteWaitingFor === 0}
         onVote={phase === 'VOTE' && !isSpectator && !hasVoted && !tiebreaker
           ? handleVote : undefined}
         hasVoted={hasVoted}
         allowedVoteIds={tiebreaker?.tiedPlayerIds}
+        onKick={isHost ? handleKick : undefined}
+        isHost={isHost}
+        currentSpeakerId={phase === 'DEBATE'
+          ? (debateSpeakingOrder[debateCurrentSpeakerIndex] ?? null)
+          : null}
       />
     </div>
   );
@@ -486,15 +563,16 @@ function GamePage(): JSX.Element {
       {/* How to play overlay */}
       {showHowToPlay && <HowToPlayOverlay onClose={() => setShowHowToPlay(false)} />}
 
-      {/* Tiebreaker modal */}
-      {tiebreaker && (
+      {/* Tiebreaker modal — only shown to living players */}
+      {tiebreaker && !isSpectator && (
         <TiebreakerModal
           tiedPlayerIds={tiebreaker.tiedPlayerIds}
           isHostDeciding={tiebreaker.isHostDeciding}
           decidingPlayerId={tiebreaker.decidingPlayerId}
           ownPlayerId={ownPlayerId}
           players={players}
-          onVote={handleVote}
+          voted={tiebreakerVoted}
+          onVote={(targetId) => handleVote(targetId, true)}
         />
       )}
 
@@ -546,7 +624,10 @@ function GamePage(): JSX.Element {
       <header className="border-b border-bunker-border bg-bunker-surface/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-3 md:px-4 py-2 md:py-3 flex items-center justify-between gap-2 md:gap-4">
           <div className="flex items-center gap-2 md:gap-3">
-            <span className="font-oswald font-bold text-base md:text-xl text-bunker-hot">БУНКЕР</span>
+            <button
+              className="font-oswald font-bold text-base md:text-xl text-bunker-hot hover:text-bunker-glow transition-colors duration-150"
+              onClick={() => navigate('/')}
+            >БУНКЕР</button>
             {round && (
               <span className="font-inter text-xs text-bunker-muted bg-bunker-bg px-2 py-1 rounded border border-bunker-border">
                 {t('game.round', { number: round })}
@@ -555,6 +636,11 @@ function GamePage(): JSX.Element {
           </div>
           <PhaseLabel phase={phase} />
           <div className="flex items-center gap-2 md:gap-3">
+            {ownNickname && (
+              <span className="font-inter text-sm text-bunker-text/80 bg-bunker-surface border border-bunker-border px-2 py-0.5 rounded truncate max-w-[100px]">
+                {ownNickname}
+              </span>
+            )}
             <span className="hidden sm:inline font-mono text-sm text-bunker-muted/60">{roomCode}</span>
             <button
               className="p-1.5 text-bunker-muted hover:text-bunker-text transition-colors duration-150"

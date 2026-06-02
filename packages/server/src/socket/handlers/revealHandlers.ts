@@ -16,7 +16,6 @@ import { z } from 'zod';
 import {
   EVENTS,
   TRAIT_CATEGORIES,
-  DEBATE_TIMER_SECONDS,
   REVEAL_QUOTAS,
   REVEAL_TIMEOUT_SECONDS,
 } from '@bunker/shared';
@@ -181,17 +180,7 @@ export function registerRevealHandlers(socket: Socket, deps: RevealHandlerDeps):
         ? 'R2_DEBATE'
         : 'R3_DEBATE';
     gsm.transitionTo(roomId, debateState);
-
-    timerService.startDebateTimer(roomId, DEBATE_TIMER_SECONDS, () => {
-      const r = roomStore.getRoom(roomId);
-      if (!r || r.currentPhase !== 'DEBATE') return;
-      const voteState = roundNumber === 1
-        ? 'R1_VOTE'
-        : roundNumber === 2
-          ? 'R2_VOTE'
-          : 'R3_VOTE';
-      gsm.transitionTo(roomId, voteState);
-    });
+    // Debate timer starts manually via host:startDebateTimer — no auto-start here
   }
 }
 
@@ -283,18 +272,11 @@ function autoSubmitPendingReveals(
     io.to(roomId).emit(EVENTS.REVEAL_UPDATE, updatePayload);
   }
 
-  // Advance to DEBATE now that all players are submitted
+  // Advance to DEBATE — timer starts manually via host:startDebateTimer
   const debateState = roundNumber === 1
     ? 'R1_DEBATE'
     : roundNumber === 2
       ? 'R2_DEBATE'
       : 'R3_DEBATE';
   gsm.transitionTo(roomId, debateState);
-
-  timerService.startDebateTimer(roomId, DEBATE_TIMER_SECONDS, () => {
-    const r = roomStore.getRoom(roomId);
-    if (!r || r.currentPhase !== 'DEBATE') return;
-    const voteState = roundNumber === 1 ? 'R1_VOTE' : roundNumber === 2 ? 'R2_VOTE' : 'R3_VOTE';
-    gsm.transitionTo(roomId, voteState);
-  });
 }

@@ -152,6 +152,7 @@ describe('VoteEngine', () => {
           ['v3', makeVoteRecord('v3', 'p1')],
         ]),
         tiebreakVotes: null,
+        voteChangesUsed: new Set(),
         eliminatedPlayerId: null,
         autoEliminationTriggered: false,
       };
@@ -168,6 +169,7 @@ describe('VoteEngine', () => {
           ['v2', makeVoteRecord('v2', 'p2')],
         ]),
         tiebreakVotes: null,
+        voteChangesUsed: new Set(),
         eliminatedPlayerId: null,
         autoEliminationTriggered: false,
       };

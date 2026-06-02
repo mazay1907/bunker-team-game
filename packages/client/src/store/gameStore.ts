@@ -60,6 +60,11 @@ interface GameState {
 
   // Timer
   debateTimer: number | null;
+  debateTimerEnded: boolean;
+
+  // Debate speaking order
+  debateSpeakingOrder: string[];
+  debateCurrentSpeakerIndex: number;
 
   // UI state
   lastError: string | null;
@@ -89,6 +94,9 @@ interface GameState {
   setTiebreaker: (state: TiebreakerState | null) => void;
   setDisconnectedVoterPrompt: (state: DisconnectedVoterPromptState | null) => void;
   setDebateTimer: (remaining: number | null) => void;
+  setDebateTimerEnded: (ended: boolean) => void;
+  setDebateSpeakingOrder: (order: string[], index: number) => void;
+  setDebateCurrentSpeakerIndex: (index: number) => void;
   setIsRevealed: (val: boolean) => void;
   setRevealWaitingFor: (count: number) => void;
   setGameEnded: (payload: GameState['gameEnded']) => void;
@@ -111,6 +119,9 @@ const initialState = {
   disconnectedVoterPrompt: null,
   revealWaitingFor: 0,
   debateTimer: null,
+  debateTimerEnded: false,
+  debateSpeakingOrder: [],
+  debateCurrentSpeakerIndex: 0,
   lastError: null,
   isRevealed: false,
   gameEnded: null,
@@ -163,6 +174,13 @@ export const useGameStore = create<GameState>((set) => ({
 
   setDebateTimer: (debateTimer) => set({ debateTimer }),
 
+  setDebateTimerEnded: (debateTimerEnded) => set({ debateTimerEnded }),
+
+  setDebateSpeakingOrder: (debateSpeakingOrder, debateCurrentSpeakerIndex) =>
+    set({ debateSpeakingOrder, debateCurrentSpeakerIndex }),
+
+  setDebateCurrentSpeakerIndex: (debateCurrentSpeakerIndex) => set({ debateCurrentSpeakerIndex }),
+
   setIsRevealed: (isRevealed) => set({ isRevealed }),
 
   setRevealWaitingFor: (revealWaitingFor) => set({ revealWaitingFor }),
@@ -170,7 +188,12 @@ export const useGameStore = create<GameState>((set) => ({
   setGameEnded: (gameEnded) => set({ gameEnded }),
 
   resetRound: () =>
-    set({ votes: [], voteTally: {}, tiebreaker: null, disconnectedVoterPrompt: null, isRevealed: false, revealWaitingFor: 0 }),
+    set({
+      votes: [], voteTally: {}, tiebreaker: null, disconnectedVoterPrompt: null,
+      isRevealed: false, revealWaitingFor: 0,
+      debateTimer: null, debateTimerEnded: false,
+      debateSpeakingOrder: [], debateCurrentSpeakerIndex: 0,
+    }),
 
   reset: () => set(initialState),
 }));

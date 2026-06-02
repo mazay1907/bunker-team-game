@@ -28,6 +28,8 @@ import type {
   PlayerKickedPayload,
   HostDisconnectedVoterPromptPayload,
   RoomClosedPayload,
+  DebateOrderPayload,
+  DebateSpeakerChangedPayload,
 } from '@bunker/shared';
 
 interface ListenerOptions {
@@ -143,10 +145,18 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
     }
     // Track how many players still need to submit
     store.setRevealWaitingFor(payload.waitingFor);
-    // Mark own reveal as submitted
+    // Mark own reveal as submitted and update ownCharacter so alreadyRevealedCats is accurate in future rounds
     const ownId = useGameStore.getState().ownPlayerId;
     if (payload.playerId === ownId) {
       store.setIsRevealed(true);
+      const { ownCharacter } = useGameStore.getState();
+      if (ownCharacter) {
+        const updatedTraits = { ...ownCharacter.traits };
+        for (const trait of payload.revealedTraits) {
+          updatedTraits[trait.category] = { ...updatedTraits[trait.category], isRevealed: true };
+        }
+        store.setOwnCharacter({ ...ownCharacter, traits: updatedTraits });
+      }
     }
   };
 
@@ -186,6 +196,10 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
         visibleTraits: Object.values(payload.fullCharacter.traits),
       });
     }
+    // Update own character card so all traits show as revealed
+    if (payload.playerId === current.ownPlayerId) {
+      store.setOwnCharacter(payload.fullCharacter);
+    }
   };
 
   // ── game:ended ────────────────────────────────────────────────────────────
@@ -210,6 +224,21 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
   // ── timer:extended — host added time ─────────────────────────────────────
   const onTimerExtended = (payload: TimerExtendedPayload): void => {
     store.setDebateTimer(payload.newRemaining);
+  };
+
+  // ── timer:ended — debate timer hit zero ───────────────────────────────────
+  const onTimerEnded = (): void => {
+    store.setDebateTimerEnded(true);
+  };
+
+  // ── debate:order — speaking order for this debate round ───────────────────
+  const onDebateOrder = (payload: DebateOrderPayload): void => {
+    store.setDebateSpeakingOrder(payload.orderedPlayerIds, payload.currentSpeakerIndex);
+  };
+
+  // ── debate:speakerChanged — host advanced the speaker ────────────────────
+  const onDebateSpeakerChanged = (payload: DebateSpeakerChangedPayload): void => {
+    store.setDebateCurrentSpeakerIndex(payload.currentSpeakerIndex);
   };
 
   // ── host:transferred — host role changed ─────────────────────────────────
@@ -267,6 +296,9 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
   socket.on(EVENTS.GAME_ENDED, onGameEnded);
   socket.on(EVENTS.TIMER_TICK, onTimerTick);
   socket.on(EVENTS.TIMER_EXTENDED, onTimerExtended);
+  socket.on(EVENTS.TIMER_ENDED, onTimerEnded);
+  socket.on(EVENTS.DEBATE_ORDER, onDebateOrder);
+  socket.on(EVENTS.DEBATE_SPEAKER_CHANGED, onDebateSpeakerChanged);
   socket.on(EVENTS.HOST_TRANSFERRED, onHostTransferred);
   socket.on('connect', onConnect);
   socket.on('disconnect', onDisconnect);
@@ -291,6 +323,9 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
     socket.off(EVENTS.GAME_ENDED, onGameEnded);
     socket.off(EVENTS.TIMER_TICK, onTimerTick);
     socket.off(EVENTS.TIMER_EXTENDED, onTimerExtended);
+    socket.off(EVENTS.TIMER_ENDED, onTimerEnded);
+    socket.off(EVENTS.DEBATE_ORDER, onDebateOrder);
+    socket.off(EVENTS.DEBATE_SPEAKER_CHANGED, onDebateSpeakerChanged);
     socket.off(EVENTS.HOST_TRANSFERRED, onHostTransferred);
     socket.off('connect', onConnect);
     socket.off('disconnect', onDisconnect);

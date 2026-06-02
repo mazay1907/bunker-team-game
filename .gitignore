@@ -32,3 +32,7 @@ pnpm-debug.log*
 
 # Coverage
 coverage/
+
+# Runtime-generated admin state files
+admin.json
+admin-status.json

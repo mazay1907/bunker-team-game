@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { t } from '../i18n/t.js';
-import { socket, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY, claimSession } from '../socket/socket.js';
+import { socket, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY, setCookie, claimSession } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type { RoomJoinPayload, RoomJoinAck, CreateRoomResponse } from '@bunker/shared';
@@ -68,8 +68,8 @@ function HomePage(): JSX.Element {
       }
 
       const data = (await response.json()) as CreateRoomResponse;
-      localStorage.setItem(SESSION_TOKEN_KEY, data.sessionToken);
-      localStorage.setItem(RECONNECT_TOKEN_KEY, data.reconnectToken);
+      setCookie(SESSION_TOKEN_KEY, data.sessionToken);
+      setCookie(RECONNECT_TOKEN_KEY, data.reconnectToken);
       setOwnPlayer(data.playerId, createNickname.trim());
       socket.connect();
 
@@ -93,7 +93,7 @@ function HomePage(): JSX.Element {
           if (ack.ok) {
             setRoom(ack.room);
             setPlayers([ack.player]);
-            localStorage.setItem(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+            setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
             resolve();
           } else {
             reject(new Error(ack.error));

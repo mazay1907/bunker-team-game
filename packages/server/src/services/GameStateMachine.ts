@@ -11,7 +11,7 @@
 
 import type { Server } from 'socket.io';
 import type { Room, Round } from '@bunker/shared';
-import { EVENTS, DEBATE_TIMER_SECONDS, REVEAL_QUOTAS } from '@bunker/shared';
+import { EVENTS, REVEAL_QUOTAS } from '@bunker/shared';
 import type { PhaseChangedPayload } from '@bunker/shared';
 import type { IRoomStore } from '../store/RoomStore.js';
 
@@ -94,7 +94,8 @@ export class GameStateMachine {
     });
 
     const revealQuota = round !== null ? REVEAL_QUOTAS[round] : null;
-    const timerSeconds = phase === 'DEBATE' ? DEBATE_TIMER_SECONDS : null;
+    // timerSeconds is null — host manually starts the debate timer via host:startDebateTimer
+    const timerSeconds: number | null = null;
 
     const payload: PhaseChangedPayload = {
       state: nextState,
@@ -118,6 +119,7 @@ export class GameStateMachine {
       revealSubmissions: new Map(),
       votes: new Map(),
       tiebreakVotes: null,
+      voteChangesUsed: new Set(),
       eliminatedPlayerId: null,
       autoEliminationTriggered: false,
     });

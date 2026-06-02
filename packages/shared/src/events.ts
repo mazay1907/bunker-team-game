@@ -58,6 +58,13 @@ export const EVENTS = {
   // Debate timer
   TIMER_TICK: 'timer:tick',
   TIMER_EXTENDED: 'timer:extended',
+  TIMER_ENDED: 'timer:ended',
+  HOST_START_DEBATE_TIMER: 'host:startDebateTimer',
+
+  // Debate speaking order
+  DEBATE_ORDER: 'debate:order',
+  HOST_NEXT_SPEAKER: 'host:nextSpeaker',
+  DEBATE_SPEAKER_CHANGED: 'debate:speakerChanged',
 
   // Voting
   VOTE_SUBMIT: 'vote:submit',
@@ -80,6 +87,8 @@ export type HostEndGameError = 'NOT_HOST' | 'WRONG_PHASE';
 export type HostPlayAgainError = 'NOT_HOST' | 'WRONG_PHASE';
 export type HostEndSessionError = 'NOT_HOST' | 'WRONG_PHASE';
 export type HostSkipVoteError = 'NOT_HOST' | 'WRONG_PHASE';
+export type HostStartDebateTimerError = 'NOT_HOST' | 'WRONG_PHASE' | 'ALREADY_RUNNING';
+export type HostNextSpeakerError = 'NOT_HOST' | 'WRONG_PHASE';
 export type RevealSubmitError = 'WRONG_PHASE' | 'WRONG_COUNT' | 'ALREADY_REVEALED' | 'ALREADY_SUBMITTED';
 export type VoteSubmitError = 'WRONG_PHASE' | 'SELF_VOTE' | 'ALREADY_VOTED' | 'INVALID_TARGET';
 
@@ -127,6 +136,8 @@ export type HostEndGameAck = { ok: true } | { ok: false; error: HostEndGameError
 export type HostPlayAgainAck = { ok: true } | { ok: false; error: HostPlayAgainError };
 export type HostEndSessionAck = { ok: true } | { ok: false; error: HostEndSessionError };
 export type HostSkipVoteAck = { ok: true } | { ok: false; error: HostSkipVoteError };
+export type HostStartDebateTimerAck = { ok: true } | { ok: false; error: HostStartDebateTimerError };
+export type HostNextSpeakerAck = { ok: true } | { ok: false; error: HostNextSpeakerError };
 export type RevealSubmitAck = { ok: true } | { ok: false; error: RevealSubmitError };
 export type VoteSubmitAck = { ok: true } | { ok: false; error: VoteSubmitError };
 
@@ -235,6 +246,17 @@ export interface GameEndedPayload {
 
 export interface RoomClosedPayload {
   message: string; // "Дякуємо за гру"
+}
+
+/** Sent when debate phase starts, listing player speak order */
+export interface DebateOrderPayload {
+  orderedPlayerIds: string[]; // circular order for this round
+  currentSpeakerIndex: number; // 0-based
+}
+
+/** Broadcast when host advances the current speaker */
+export interface DebateSpeakerChangedPayload {
+  currentSpeakerIndex: number;
 }
 
 // ─── HTTP API types ──────────────────────────────────────────────────────────────

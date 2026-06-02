@@ -23,6 +23,8 @@ interface OwnCharacterCardProps {
   selectableCategories?: TraitCategory[];
   selectedCategories?: TraitCategory[];
   onToggle?: (cat: TraitCategory) => void;
+  /** When true, only revealed traits are shown (DEBATE/VOTE phases) */
+  showOnlyRevealed?: boolean;
 }
 
 export function OwnCharacterCard({
@@ -30,16 +32,25 @@ export function OwnCharacterCard({
   selectableCategories,
   selectedCategories = [],
   onToggle,
+  showOnlyRevealed = false,
 }: OwnCharacterCardProps): JSX.Element {
   const isRevealPhase = selectableCategories !== undefined;
+  const visibleCategories = showOnlyRevealed
+    ? TRAIT_CATEGORIES.filter((c) => character.traits[c].isRevealed)
+    : TRAIT_CATEGORIES;
 
   return (
     <div className="bg-bunker-surface border border-bunker-border rounded p-4">
       <h3 className="font-oswald font-bold text-sm text-bunker-muted uppercase tracking-wider mb-3">
         {t('game.card.ownCard')}
       </h3>
+      {showOnlyRevealed && visibleCategories.length === 0 && (
+        <p className="font-inter text-sm text-bunker-muted text-center py-2">
+          {t('game.card.noneRevealed')}
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-2">
-        {TRAIT_CATEGORIES.map((cat) => {
+        {visibleCategories.map((cat) => {
           const slot = character.traits[cat];
           const isAlreadyRevealed = slot.isRevealed;
           const isSelected = selectedCategories.includes(cat);

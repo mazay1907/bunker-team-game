@@ -39,6 +39,7 @@ function makeRound(n: 1 | 2 | 3): Round {
     revealSubmissions: new Map(),
     votes: new Map(),
     tiebreakVotes: null,
+    voteChangesUsed: new Set(),
     eliminatedPlayerId: null,
     autoEliminationTriggered: false,
   };

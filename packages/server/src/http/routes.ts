@@ -32,6 +32,27 @@ export async function registerRoutes(
     });
   });
 
+  // ── Admin: view all active rooms, players, and current host ──────────────────
+  // Use this to find room codes and nicknames when editing admin.json.
+  fastify.get('/api/admin/rooms', async (_req, reply) => {
+    const rooms = roomStore.getAllRooms().map((room) => {
+      const host = room.players.get(room.hostPlayerId);
+      return {
+        roomCode: room.roomCode,
+        state: room.state,
+        host: host?.nickname ?? '—',
+        players: Array.from(room.players.values())
+          .filter((p) => p.status !== 'KICKED')
+          .map((p) => ({
+            nickname: p.nickname,
+            status: p.status,
+            isHost: p.playerId === room.hostPlayerId,
+          })),
+      };
+    });
+    return reply.send({ rooms });
+  });
+
   fastify.post<{
     Body: CreateRoomRequest;
     Reply: CreateRoomResponse | { error: string };

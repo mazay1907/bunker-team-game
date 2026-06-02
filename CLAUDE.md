@@ -141,32 +141,45 @@ Example: `feat(server): implement VoteEngine with tie resolution`
 
 ## Current Status
 
-**Phase:** MVP — Sprint 0 complete, Sprint 1 (game loop) next
+**Phase:** MVP — full game loop live and battle-tested
 
 | Area | Status |
 |---|---|
 | Game rules | Complete — `GAME_RULES.md` |
-| Product requirements | Complete — `Reqs/` (VISION, EPICS, SCENARIOS, BACKLOG, MVP_BACKLOG) |
-| Architecture docs | Complete — `Architecture/` (TECH_STACK, SYSTEM_DESIGN, DATA_MODEL, API_DESIGN, CODE_STANDARDS, DEPLOYMENT, SECURITY) |
-| Missing arch docs | `Architecture/DIAGRAMS.md` — optional, not blocking |
-| Sprint 0 | **Complete — 42/42 tests passing** |
-| Code | `packages/` scaffold live, server + client boot, room create/join works |
+| Product requirements | Complete — `Reqs/` |
+| Architecture docs | Complete — `Architecture/` |
+| Shared types | `packages/shared/src/events.ts` + `models.ts` — source of truth for all Socket.IO contracts |
+| Server | Fastify + Socket.IO, all handlers live, `tsx watch` auto-reload in dev |
+| Client | React 18 + Vite + Zustand, all pages + components, mobile layout |
+| i18n | 100% Ukrainian — zero hardcoded strings, all keys in `uk.json` |
+| Tests | Vitest — VoteEngine, TimerService, reconnect resilience, room expiry |
+| Docker | `Dockerfile` + `docker-compose.yml` ready |
 
-**Sprint 0 delivered (S0-1 → S0-9):**
-- pnpm monorepo: `packages/shared` (types), `packages/server` (Fastify + Socket.IO), `packages/client` (React + Vite)
-- `POST /api/rooms` → room code (6-char ASCII) + two session tokens
-- `room:join` socket handler with Zod validation, reconnect support
-- In-memory `RoomStore`, `SessionStore`, `ReconnectStore` behind interfaces
-- `CharacterDealer` — Fisher-Yates shuffle, 210 traits × 7 categories, uniqueness guaranteed
-- Zustand store + Socket.IO listeners wired on client
-- `uk.json` i18n — zero hardcoded Ukrainian strings in components
-- Docker: `Dockerfile` + `docker-compose.yml`
+**Full game loop delivered:**
+- Room create (HTTP) + join/reconnect (Socket.IO) with cookies (24h TTL, not localStorage)
+- 3-round game: REVEAL → DEBATE → VOTE × 3
+- Bunker capacity always = `totalPlayers − 3` (displayed dynamically, not from scenario JSON)
+- REVEAL: rolling reveal; auto-submit on 2-min timeout; own card shows only revealed traits in DEBATE/VOTE; already-revealed traits blocked from reselection in subsequent rounds
+- DEBATE: **host manually starts timer** via "Запустити таймер" button; timer is display-only (no auto-advance); speaking order shown in circular rotation (shifts by 1 each round); host advances speaker with "Наступний →"; timer-ended signal with no side effects; host clicks "Голосувати зараз" to start voting manually
+- VOTE: vote tallies hidden until all players have voted; each player may change vote once; tiebreak modal shown only to living players with per-player voted feedback
+- Elimination: eliminated player's full card (all 7 traits) shown immediately; own card visible in left column even as spectator
+- Host: can kick players mid-game (KICKED status); kicked players can reconnect via cookies; if host disconnects → 60s timer → host transferred; own nickname shown in header
 
-**Next step:** Sprint 1 — `GameStateMachine`, `VoteEngine`, `TimerService`, reveal/debate/vote phases (WBS tasks in `Reqs/MVP_BACKLOG.md` sections 3–7).
+**Resilience:**
+- 5-min reconnect hold before auto-elimination (single-elimination rule per round)
+- Host-transfer timer (60s) on host disconnect mid-game
+- React StrictMode double-mount guard (`joinCalledRef`) prevents duplicate `player:joined`
+- Room expiry sweep (30 min idle, no connected players)
+- `admin-status.json` written every 5s with live room/player state (separate from `admin.json` to avoid file-watcher loop)
 
 **Source of truth priority:** `GAME_RULES.md` > `Architecture/` > `Reqs/` > `Design/` > this file.
 
 **Design:** before implementing any page/component, read `Design/DESIGN_SYSTEM.md` (tokens, typography, buttons, cards, animations) and the corresponding `Design/*_PAGE_FIGMA_BRIEF.md`. Never use raw hex or pixel values — only the `bunker-*` Tailwind tokens defined there.
+
+**Known game-mechanic decisions (not in GAME_RULES.md):**
+- Kicked players can rejoin via reconnect token in cookies (host can kick again to remove permanently)
+- Tiebreak vote resets `hasVoted` client-side so the modal buttons work without re-entering
+- Speaking order in DEBATE is server-computed: players sorted by `joinedAt`, circular-shifted by `(round − 1)` positions; host broadcasts `debate:order` + `debate:speakerChanged` events
 
 ---
 

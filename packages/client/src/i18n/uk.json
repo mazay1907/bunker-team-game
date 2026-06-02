@@ -51,9 +51,15 @@
   "game.debate.timeLeft": "Часу залишилось",
   "game.debate.extendTime": "+1 хв",
   "game.debate.skipToVote": "Голосувати зараз",
+  "game.debate.startTimer": "Запустити таймер",
+  "game.debate.timerEnded": "Час вийшов!",
+  "game.debate.nextSpeaker": "Наступний",
+  "game.debate.speakingOrder": "Порядок слова",
+  "game.debate.currentSpeaker": "Говорить зараз",
 
   "game.eliminated.you": "Тебе виключено з бункера",
   "game.eliminated.spectator": "Ви спостерігач",
+  "game.spectator.badge": "Спостерігач",
   "game.eliminated.other": "{{nickname}} виключено",
 
   "game.reconnecting": "{{nickname}} перепідключається…",
@@ -64,6 +70,7 @@
   "game.card.revealed": "розкрито",
   "game.card.hidden": "???",
   "game.card.ownCard": "МОЯ КАРТКА",
+  "game.card.noneRevealed": "Ще нічого не розкрито",
   "game.players": "ГРАВЦІ",
 
   "trait.category.GENDER_AGE": "Стать / вік",
@@ -152,6 +159,7 @@
   "game.loading": "Завантаження…",
   "lobby.connecting": "Підключаємось…",
   "game.vote.voteCounted": "✓ Ваш голос зараховано.",
+  "game.vote.changeVote": "Змінити голос",
   "game.spectatorWatching": "👁 Ви спостерігаєте",
   "game.tiebreaker.revote": "Переголосування",
   "game.tiebreaker.decidingVote": "Вирішальний голос",
@@ -161,6 +169,9 @@
 
   "error.goHome": "На головну",
   "lobby.selfBadge": "ви",
+  "lobby.enterNicknameTitle": "Приєднатися до кімнати",
+  "lobby.joinButton": "Увійти",
+  "lobby.roomLabel": "Кімната",
   "game.selfBadge": "ви",
   "game.vote.button": "Голос",
   "game.reconnectingBadge": "перепідключається…"

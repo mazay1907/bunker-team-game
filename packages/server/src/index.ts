@@ -10,7 +10,7 @@ import rateLimit from '@fastify/rate-limit';
 import { Server as SocketIOServer } from 'socket.io';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 import { EVENTS } from '@bunker/shared';
 import { InMemoryRoomStore } from './store/RoomStore.js';
 import { InMemorySessionStore } from './store/SessionStore.js';
@@ -28,6 +28,7 @@ import { registerHostHandlers } from './socket/handlers/hostHandlers.js';
 import { registerRevealHandlers } from './socket/handlers/revealHandlers.js';
 import { registerVoteHandlers } from './socket/handlers/voteHandlers.js';
 import { RoomExpiryService } from './services/RoomExpiryService.js';
+import { AdminConfigService } from './services/AdminConfig.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -109,6 +110,15 @@ async function start(): Promise<void> {
   // Room expiry — sweeps idle empty rooms every 5 minutes
   const roomExpiry = new RoomExpiryService(roomStore, timerService);
   roomExpiry.start();
+
+  // Admin config — watches admin.json at monorepo root (bunker_app/) for host overrides
+  // __dirname = packages/server/src/ → go up 3 levels to reach bunker_app/
+  const adminConfigPath = resolve(__dirname, '../../../admin.json');
+  if (!existsSync(adminConfigPath)) {
+    writeFileSync(adminConfigPath, JSON.stringify({ hostOverrides: {} }, null, 2), 'utf8');
+  }
+  const adminConfig = new AdminConfigService(adminConfigPath, io, roomStore);
+  adminConfig.start();
 
   // Socket middleware — validates tokens, attaches playerId to socket.data
   io.use(createSocketMiddleware(sessionStore));

@@ -9,9 +9,12 @@ import { t } from '../../i18n/t.js';
 interface ScenarioCardProps {
   scenario: Scenario;
   collapsed?: boolean;
+  /** Total player count — capacity displayed as playerCount - 3 */
+  playerCount?: number;
 }
 
-export function ScenarioCard({ scenario, collapsed }: ScenarioCardProps): JSX.Element {
+export function ScenarioCard({ scenario, collapsed, playerCount }: ScenarioCardProps): JSX.Element {
+  const capacity = playerCount !== undefined ? Math.max(playerCount - 3, 1) : scenario.bunkerConditions.capacity;
   if (collapsed) {
     return (
       <div className="px-4 py-2 bg-bunker-surface border border-bunker-border rounded flex items-center gap-2">
@@ -47,7 +50,7 @@ export function ScenarioCard({ scenario, collapsed }: ScenarioCardProps): JSX.El
         <div className="grid grid-cols-3 gap-2">
           <div className="text-center">
             <p className="font-mono text-xs text-bunker-muted">{t('game.capacity')}</p>
-            <p className="font-oswald text-lg text-bunker-hot">{scenario.bunkerConditions.capacity}</p>
+            <p className="font-oswald text-lg text-bunker-hot">{capacity}</p>
           </div>
           <div className="text-center">
             <p className="font-mono text-xs text-bunker-muted">{t('game.supplyDuration')}</p>

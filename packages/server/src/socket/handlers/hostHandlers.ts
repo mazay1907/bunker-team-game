@@ -28,14 +28,19 @@ import type {
   HostEndGameAck,
   HostPlayAgainAck,
   HostEndSessionAck,
+  HostStartDebateTimerAck,
+  HostNextSpeakerAck,
   PlayerKickedPayload,
   ScenariosListPayload,
   GameStartedPayload,
   GameEndedPayload,
   RoomClosedPayload,
+  DebateOrderPayload,
+  DebateSpeakerChangedPayload,
   PlayerView,
   Game,
 } from '@bunker/shared';
+import { DEBATE_TIMER_SECONDS } from '@bunker/shared';
 import type { IRoomStore } from '../../store/RoomStore.js';
 import type { ContentData } from '../../content/ContentData.js';
 import type { RoomManager } from '../../services/RoomManager.js';
@@ -45,6 +50,9 @@ import type { CharacterDealer } from '../../services/CharacterDealer.js';
 import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 import { emitAnalytics } from '../../services/Analytics.js';
 import { startRevealPhaseTimer } from './revealHandlers.js';
+
+/** Server-side speaking order state per room — not in shared types */
+const debateSpeakingState = new Map<string, { orderedPlayerIds: string[]; currentSpeakerIndex: number }>();
 
 interface HostHandlerDeps {
   io: Server;
@@ -83,8 +91,6 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     if (!found) return ack({ ok: false, error: 'NOT_HOST' });
     const { room } = found;
 
-    if (room.state !== 'LOBBY') return ack({ ok: false, error: 'GAME_STARTED' });
-
     const parsed = kickSchema.safeParse(raw);
     if (!parsed.success) return ack({ ok: false, error: 'PLAYER_NOT_FOUND' });
     const { targetPlayerId } = parsed.data as HostKickPayload;
@@ -98,11 +104,22 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
       io.to(target.socketId).emit(EVENTS.PLAYER_KICKED, kickedPayload);
     }
 
-    roomStore.updateRoom(room.roomId, (r) => {
-      r.players.delete(targetPlayerId);
-      r.lastActivityAt = new Date();
-      return r;
-    });
+    if (room.state === 'LOBBY') {
+      // In lobby: simply remove the player
+      roomStore.updateRoom(room.roomId, (r) => {
+        r.players.delete(targetPlayerId);
+        r.lastActivityAt = new Date();
+        return r;
+      });
+    } else {
+      // In game: mark as KICKED (keeps them in the list as spectator-like)
+      roomStore.updateRoom(room.roomId, (r) => {
+        const p = r.players.get(targetPlayerId);
+        if (p) r.players.set(targetPlayerId, { ...p, status: 'KICKED', socketId: null });
+        r.lastActivityAt = new Date();
+        return r;
+      });
+    }
 
     io.to(room.roomId).emit(EVENTS.PLAYER_LEFT, { playerId: targetPlayerId, newHostId: null });
     return ack({ ok: true });
@@ -232,7 +249,62 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     if (room.currentPhase !== 'DEBATE') return ack({ ok: false, error: 'WRONG_PHASE' });
 
     timerService.cancelTimer(room.roomId);
+    debateSpeakingState.delete(room.roomId);
     gsm.advance(room.roomId); // DEBATE → VOTE
+    return ack({ ok: true });
+  });
+
+  // ── host:startDebateTimer ─────────────────────────────────────────────────────
+  socket.on(EVENTS.HOST_START_DEBATE_TIMER, (ack: (r: HostStartDebateTimerAck) => void) => {
+    const found = getHostRoom();
+    if (!found) return ack({ ok: false, error: 'NOT_HOST' });
+    const { room } = found;
+
+    if (room.currentPhase !== 'DEBATE') return ack({ ok: false, error: 'WRONG_PHASE' });
+
+    // Compute circular speaking order for this round (shift by round-1)
+    const roundNumber = room.currentRound ?? 1;
+    const activePlayers = [...room.players.values()]
+      .filter((p) => p.status === 'ACTIVE' || p.status === 'RECONNECTING')
+      .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime());
+    const shift = (roundNumber - 1) % Math.max(activePlayers.length, 1);
+    const orderedPlayerIds = [
+      ...activePlayers.slice(shift),
+      ...activePlayers.slice(0, shift),
+    ].map((p) => p.playerId);
+
+    debateSpeakingState.set(room.roomId, { orderedPlayerIds, currentSpeakerIndex: 0 });
+
+    const orderPayload: DebateOrderPayload = { orderedPlayerIds, currentSpeakerIndex: 0 };
+    io.to(room.roomId).emit(EVENTS.DEBATE_ORDER, orderPayload);
+
+    // Start countdown — when it ends, just signal (no auto-advance to vote)
+    timerService.startDebateTimer(room.roomId, DEBATE_TIMER_SECONDS, () => {
+      const r = roomStore.getRoom(room.roomId);
+      if (!r || r.currentPhase !== 'DEBATE') return;
+      io.to(room.roomId).emit(EVENTS.TIMER_ENDED, {});
+    });
+
+    return ack({ ok: true });
+  });
+
+  // ── host:nextSpeaker ──────────────────────────────────────────────────────────
+  socket.on(EVENTS.HOST_NEXT_SPEAKER, (ack: (r: HostNextSpeakerAck) => void) => {
+    const found = getHostRoom();
+    if (!found) return ack({ ok: false, error: 'NOT_HOST' });
+    const { room } = found;
+
+    if (room.currentPhase !== 'DEBATE') return ack({ ok: false, error: 'WRONG_PHASE' });
+
+    const state = debateSpeakingState.get(room.roomId);
+    if (!state) return ack({ ok: false, error: 'WRONG_PHASE' });
+
+    const next = (state.currentSpeakerIndex + 1) % state.orderedPlayerIds.length;
+    debateSpeakingState.set(room.roomId, { ...state, currentSpeakerIndex: next });
+
+    const changedPayload: DebateSpeakerChangedPayload = { currentSpeakerIndex: next };
+    io.to(room.roomId).emit(EVENTS.DEBATE_SPEAKER_CHANGED, changedPayload);
+
     return ack({ ok: true });
   });
 

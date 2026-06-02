@@ -43,9 +43,11 @@ import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 import { emitAnalytics } from '../../services/Analytics.js';
 
 // Zod schema for room:join payload validation
+// nickname min(2) is NOT enforced here — reconnect sends empty string and is valid.
+// The first-time join path does the length check manually.
 const roomJoinSchema = z.object({
   roomCode: z.string().regex(/^[A-Z0-9]{6}$/, 'Invalid room code format'),
-  nickname: z.string().trim().min(2).max(20),
+  nickname: z.string().trim().max(20),
   sessionToken: z.string().nullable(),
 });
 
@@ -86,9 +88,11 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
           if (existingPlayerId) {
             const found = roomManager.findPlayerById(existingPlayerId);
             // Also handle ACTIVE players with no socketId (host connecting after HTTP room creation)
+            // Also allow KICKED players to re-enter if they still have their reconnect token
             const isReturning =
               found &&
               (found.player.status === 'RECONNECTING' ||
+                found.player.status === 'KICKED' ||
                 (found.player.status === 'ACTIVE' && !found.player.socketId));
 
             if (isReturning && found) {
@@ -133,10 +137,16 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
                 };
                 socket.emit(EVENTS.ROOM_STATE, statePayload);
 
-                const reconnectedPayload: PlayerReconnectedPayload = {
-                  playerId: existingPlayerId,
-                };
-                socket.to(room.roomId).emit(EVENTS.PLAYER_RECONNECTED, reconnectedPayload);
+                if (player.status === 'KICKED') {
+                  // Kicked player re-entering — others removed them from their list, re-add via PLAYER_JOINED
+                  const playerView = roomManager.toPlayerView(updatedPlayer!, updatedRoom, existingPlayerId);
+                  socket.to(room.roomId).emit(EVENTS.PLAYER_JOINED, { player: playerView });
+                } else {
+                  const reconnectedPayload: PlayerReconnectedPayload = {
+                    playerId: existingPlayerId,
+                  };
+                  socket.to(room.roomId).emit(EVENTS.PLAYER_RECONNECTED, reconnectedPayload);
+                }
               }
 
               return ack({
@@ -164,6 +174,10 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
 
         if (room.players.size >= MAX_PLAYERS) {
           return ack({ ok: false, error: 'ROOM_FULL' });
+        }
+
+        if (nickname.trim().length < 2) {
+          return ack({ ok: false, error: 'INVALID_NICKNAME' });
         }
 
         // Handle nickname collision
@@ -215,6 +229,19 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
           playerCount: room.players.size,
           timestamp: now.toISOString(),
         });
+
+        // Send full room state (all current players) to the joining socket
+        // so they immediately see everyone already in the room, not just themselves.
+        const updatedRoom = roomStore.getRoom(room.roomId);
+        if (updatedRoom) {
+          const statePayload: RoomStatePayload = {
+            room: roomManager.toRoomView(updatedRoom, contentData),
+            players: roomManager.getPlayerViews(updatedRoom, playerId),
+            ownCharacter: null,
+            game: null,
+          };
+          socket.emit(EVENTS.ROOM_STATE, statePayload);
+        }
 
         return ack({
           ok: true,

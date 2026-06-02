@@ -1,7 +1,7 @@
 /**
  * Socket.IO client singleton.
  * Not connected by default — call socket.connect() when needed.
- * Both tokens are read from localStorage and injected into the auth handshake.
+ * Both tokens are stored in cookies (24 h TTL) and injected into the auth handshake.
  *
  * Multiple-tab detection (BACKLOG 3.1.3):
  * When a second tab opens with the same session token, the newest tab takes over
@@ -18,10 +18,23 @@ export const RECONNECT_TOKEN_KEY = 'bunker_reconnect';
 /** BroadcastChannel name — must match across all tabs */
 const SESSION_CHANNEL = 'bunker_session_claim';
 
+/** Cookie TTL: 24 hours */
+const COOKIE_TTL_HOURS = 24;
+
+export function setCookie(name: string, value: string, hours = COOKIE_TTL_HOURS): void {
+  const expires = new Date(Date.now() + hours * 3_600_000).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Strict`;
+}
+
+export function getCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${encodeURIComponent(name)}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]!) : null;
+}
+
 function getStoredTokens(): { sessionToken: string | null; reconnectToken: string | null } {
   return {
-    sessionToken: localStorage.getItem(SESSION_TOKEN_KEY),
-    reconnectToken: localStorage.getItem(RECONNECT_TOKEN_KEY),
+    sessionToken: getCookie(SESSION_TOKEN_KEY),
+    reconnectToken: getCookie(RECONNECT_TOKEN_KEY),
   };
 }
 
@@ -29,7 +42,7 @@ function getStoredTokens(): { sessionToken: string | null; reconnectToken: strin
 // autoConnect: false — we control when to connect (after room creation or join)
 const socket: Socket = io({
   autoConnect: false,
-  // Auth is evaluated at connect() time — reads current localStorage values
+  // Auth is evaluated at connect() time — reads current cookie values
   auth: (cb: (data: Record<string, string | null>) => void) => {
     const { sessionToken, reconnectToken } = getStoredTokens();
     cb({ sessionToken, reconnectToken });
