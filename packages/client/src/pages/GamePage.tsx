@@ -350,20 +350,12 @@ function GamePage(): JSX.Element {
     }
   }, [tiebreaker]);
 
-  if (!room || gameEnded) {
-    if (gameEnded) return <GameOverScreen />;
-    return (
-      <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
-        <p className="font-oswald text-xl text-bunker-muted animate-pulse">{t('game.loading')}</p>
-      </div>
-    );
-  }
-
+  // ── Derived values (null-safe — used in callbacks below) ─────────────────
   const ownPlayer = players.find((p) => p.playerId === ownPlayerId);
   const isHost = ownPlayer?.isHost ?? false;
   const isSpectator = ownPlayer?.status === 'SPECTATOR';
-  const phase = room.currentPhase;
-  const round = room.currentRound;
+  const phase = room?.currentPhase ?? null;
+  const round = room?.currentRound ?? null;
   const quota = round === 3 ? 1 : 2;
 
   // ── Reveal submit ────────────────────────────────────────────────────────
@@ -462,9 +454,18 @@ function GamePage(): JSX.Element {
   }, [setDisconnectedVoterPrompt]);
 
   const handleWaitForVoter = useCallback((): void => {
-    // Dismiss the modal — server re-prompts after 60 s if still disconnected
     setDisconnectedVoterPrompt(null);
   }, [setDisconnectedVoterPrompt]);
+
+  // ── Early return after all hooks ──────────────────────────────────────────
+  if (!room || gameEnded) {
+    if (gameEnded) return <GameOverScreen />;
+    return (
+      <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
+        <p className="font-oswald text-xl text-bunker-muted animate-pulse">{t('game.loading')}</p>
+      </div>
+    );
+  }
 
   const scenario = room.scenario;
 
