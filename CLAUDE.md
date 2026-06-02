@@ -180,6 +180,45 @@ Example: `feat(server): implement VoteEngine with tie resolution`
 - Kicked players can rejoin via reconnect token in cookies (host can kick again to remove permanently)
 - Tiebreak vote resets `hasVoted` client-side so the modal buttons work without re-entering
 - Speaking order in DEBATE is server-computed: players sorted by `joinedAt`, circular-shifted by `(round − 1)` positions; host broadcasts `debate:order` + `debate:speakerChanged` events
+- Tiebreak `allowedIds` comes from `round.tiebreakCandidateIds` (persisted in Round when tiebreak starts), not derived from the (initially empty) `round.tiebreakVotes` map
+- Invite link fallback: if `doJoin('')` returns `INVALID_NICKNAME` (old reconnect token from a different game), client clears the error and shows the nickname form
+
+---
+
+## Next Sprint — Backlog
+
+### Sprint 5 tasks (priority order)
+
+#### S5-1 · Fix page reload freezing on "Завантаження…"
+**Problem:** refreshing the browser while on `/game/:roomCode` never reconnects. `GamePage` has no reconnect logic — it just renders the loading spinner forever because `room` is `null` in Zustand after a full page reload.
+
+**Fix plan (server-authoritative reconnect in GamePage):**
+- In `GamePage.tsx`, add a `useEffect` that fires on mount when `room === null`
+- Check for reconnect token in cookies; if missing → `navigate('/')`
+- If present: `socket.connect()` then `socket.emit(EVENTS.ROOM_JOIN, { roomCode, nickname: '', sessionToken })` with the stored tokens in auth (already injected via socket.ts `auth` callback)
+- On `ack.ok`: call `store.setOwnPlayer(ack.player.playerId, ack.player.nickname)` and `setCookie(RECONNECT_TOKEN_KEY, ...)`
+- `room:state` event arrives before the ack and populates the store → `room` becomes non-null → loading screen clears
+- On `ack.error`: navigate to `/` (room closed or expired)
+- Guard with `joinCalledRef` (same StrictMode pattern as LobbyPage) to prevent double-emit
+
+#### S5-2 · Blind reveal — hide other players' selections until all submit
+**Problem:** `reveal:update` is broadcast immediately when each player submits, letting others see traits in real time. The game rule is that reveals should be hidden until everyone has submitted.
+
+**Fix plan:**
+- In `revealHandlers.ts`: split the broadcast into two cases:
+  - `waitingFor > 0`: emit `REVEAL_UPDATE` with `revealedTraits: []` (just the `waitingFor` count, no trait values)
+  - `waitingFor === 0`: loop over all players' submissions and emit one `REVEAL_UPDATE` per player with their actual `revealedTraits`
+- Add `isFinal: boolean` to `RevealUpdatePayload` in `events.ts` so the client knows when to render traits vs. just the waiting counter
+- In `listeners.ts` `onRevealUpdate`: only merge traits into `player.visibleTraits` when `isFinal === true`; otherwise just update `revealWaitingFor`
+- Own character card still shows own revealed traits immediately (they know what they picked); only OTHER players' traits are hidden
+
+#### S5-3 · Dynamic debate timer — 1 minute per active player
+**Problem:** `DEBATE_TIMER_SECONDS = 300` is a fixed constant. Should be `60 × activePlayers.length`.
+
+**Fix plan:**
+- In `hostHandlers.ts` `HOST_START_DEBATE_TIMER` handler: replace `DEBATE_TIMER_SECONDS` with `60 * activePlayers.length` (already computing `activePlayers` for speaking order)
+- The speaking order array length = `activePlayers.length`, so `timerSeconds = orderedPlayerIds.length * 60`
+- No shared-type changes needed
 
 ---
 
