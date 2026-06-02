@@ -86,9 +86,8 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
 
       // Determine if this is a tiebreak vote
       const isTiebreak = round.tiebreakVotes !== null;
-      const allowedIds = isTiebreak
-        ? [...new Set([...round.tiebreakVotes!.values()].map((v) => v.targetId))]
-        : undefined;
+      // allowedIds comes from the stored candidates, not from existing votes (which may be empty)
+      const allowedIds = isTiebreak ? (round.tiebreakCandidateIds ?? undefined) : undefined;
 
       // Validate self-vote
       if (targetId === playerId) return ack({ ok: false, error: 'SELF_VOTE' });
@@ -324,7 +323,10 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
       // First tie — start tiebreak re-vote
       roomStore.updateRoom(roomId, (r) => {
         const rd = r.game?.rounds[roundNumber - 1];
-        if (rd) rd.tiebreakVotes = new Map();
+        if (rd) {
+          rd.tiebreakVotes = new Map();
+          rd.tiebreakCandidateIds = leaders;
+        }
         return r;
       });
 
@@ -346,10 +348,13 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
       };
       io.to(roomId).emit(EVENTS.VOTE_TIEBREAKER, tiebreakerPayload);
 
-      // Reset tiebreak votes to let decider cast the final vote
+      // Reset tiebreak votes — decider picks from the same candidates
       roomStore.updateRoom(roomId, (r) => {
         const rd = r.game?.rounds[roundNumber - 1];
-        if (rd) rd.tiebreakVotes = new Map();
+        if (rd) {
+          rd.tiebreakVotes = new Map();
+          rd.tiebreakCandidateIds = leaders;
+        }
         return r;
       });
     }

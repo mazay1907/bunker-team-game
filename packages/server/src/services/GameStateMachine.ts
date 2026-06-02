@@ -119,6 +119,7 @@ export class GameStateMachine {
       revealSubmissions: new Map(),
       votes: new Map(),
       tiebreakVotes: null,
+      tiebreakCandidateIds: null,
       voteChangesUsed: new Set(),
       eliminatedPlayerId: null,
       autoEliminationTriggered: false,

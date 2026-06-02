@@ -102,6 +102,7 @@ export interface Round {
   revealSubmissions: Map<string, RevealSubmission>; // keyed by playerId
   votes: Map<string, VoteRecord>; // keyed by voterId
   tiebreakVotes: Map<string, VoteRecord> | null; // populated on first tie
+  tiebreakCandidateIds: string[] | null; // the players eligible to be voted out in tiebreak
   voteChangesUsed: Set<string>; // playerIds who've already changed their vote once
   eliminatedPlayerId: string | null;
   autoEliminationTriggered: boolean; // true if disconnect timeout caused elimination
