@@ -202,11 +202,14 @@ export interface GameStartedPayload {
   players: PlayerView[];
 }
 
-/** Broadcast immediately when any player submits reveals (rolling reveal) */
+/** Sent when a player submits reveals.
+ * isFinal=false → traits hidden, only waitingFor counter updated.
+ * isFinal=true  → all players submitted, traits now visible. */
 export interface RevealUpdatePayload {
   playerId: string;
-  revealedTraits: TraitSlot[];
-  waitingFor: number; // 0 means all submitted → phase advances
+  revealedTraits: TraitSlot[]; // empty when isFinal=false
+  waitingFor: number;
+  isFinal: boolean;
 }
 
 export interface TimerTickPayload {

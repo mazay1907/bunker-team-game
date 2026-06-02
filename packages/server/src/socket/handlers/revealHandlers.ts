@@ -108,17 +108,14 @@ export function registerRevealHandlers(socket: Socket, deps: RevealHandlerDeps):
         (p) => !updatedRound.revealSubmissions.has(p.playerId),
       ).length;
 
-      const updatedPlayer = updatedRoom.players.get(playerId)!;
-      const revealedTraits = Object.values(updatedPlayer.character?.traits ?? {}).filter(
-        (t) => categories.includes(t.category),
-      );
-
-      const updatePayload: RevealUpdatePayload = {
+      // Blind reveal: emit submission notice (no traits) until everyone is done
+      const blindPayload: RevealUpdatePayload = {
         playerId,
-        revealedTraits,
+        revealedTraits: [],
         waitingFor,
+        isFinal: false,
       };
-      io.to(room.roomId).emit(EVENTS.REVEAL_UPDATE, updatePayload);
+      io.to(room.roomId).emit(EVENTS.REVEAL_UPDATE, blindPayload);
 
       ack({ ok: true });
 
@@ -174,6 +171,9 @@ export function registerRevealHandlers(socket: Socket, deps: RevealHandlerDeps):
 
     timerService.clearRevealTimer(roomId);
 
+    // All submitted — now reveal all traits at once (blind reveal)
+    emitFinalReveals(roomId, roundNumber);
+
     const debateState = roundNumber === 1
       ? 'R1_DEBATE'
       : roundNumber === 2
@@ -181,6 +181,30 @@ export function registerRevealHandlers(socket: Socket, deps: RevealHandlerDeps):
         : 'R3_DEBATE';
     gsm.transitionTo(roomId, debateState);
     // Debate timer starts manually via host:startDebateTimer — no auto-start here
+  }
+
+  /** Emit one final REVEAL_UPDATE per player so all traits become visible simultaneously. */
+  function emitFinalReveals(roomId: string, roundNumber: 1 | 2 | 3): void {
+    const room = roomStore.getRoom(roomId);
+    if (!room) return;
+    const round = room.game?.rounds[roundNumber - 1];
+    if (!round) return;
+
+    for (const [pid, submission] of round.revealSubmissions.entries()) {
+      const player = room.players.get(pid);
+      if (!player?.character) continue;
+      const revealedTraits = submission.revealedCategories
+        .map((cat) => player.character!.traits[cat])
+        .filter((s): s is typeof s & NonNullable<typeof s> => s !== undefined);
+
+      const finalPayload: RevealUpdatePayload = {
+        playerId: pid,
+        revealedTraits,
+        waitingFor: 0,
+        isFinal: true,
+      };
+      io.to(roomId).emit(EVENTS.REVEAL_UPDATE, finalPayload);
+    }
   }
 }
 
@@ -257,19 +281,26 @@ function autoSubmitPendingReveals(
       return r;
     });
 
-    // Broadcast the auto-reveal so all clients see updated traits
-    const updatedRoom = roomStore.getRoom(roomId)!;
-    const updatedPlayer = updatedRoom.players.get(player.playerId);
-    const revealedTraits = Object.values(updatedPlayer?.character?.traits ?? {}).filter(
-      (t) => categories.includes(t.category),
-    );
+  }
 
-    const updatePayload: RevealUpdatePayload = {
-      playerId: player.playerId,
+  // All auto-submissions done — emit final batch for ALL players in this round
+  const finalRoom = roomStore.getRoom(roomId);
+  if (!finalRoom) return;
+  const finalRound = finalRoom.game?.rounds[roundNumber - 1];
+  if (!finalRound) return;
+  for (const [pid, submission] of finalRound.revealSubmissions.entries()) {
+    const p = finalRoom.players.get(pid);
+    if (!p?.character) continue;
+    const revealedTraits = submission.revealedCategories
+      .map((cat) => p.character!.traits[cat])
+      .filter((s): s is typeof s & NonNullable<typeof s> => s !== undefined);
+    const finalPayload: RevealUpdatePayload = {
+      playerId: pid,
       revealedTraits,
-      waitingFor: 0, // all have now submitted (or will after loop)
+      waitingFor: 0,
+      isFinal: true,
     };
-    io.to(roomId).emit(EVENTS.REVEAL_UPDATE, updatePayload);
+    io.to(roomId).emit(EVENTS.REVEAL_UPDATE, finalPayload);
   }
 
   // Advance to DEBATE — timer starts manually via host:startDebateTimer

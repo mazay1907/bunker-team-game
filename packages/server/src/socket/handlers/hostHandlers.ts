@@ -40,7 +40,6 @@ import type {
   PlayerView,
   Game,
 } from '@bunker/shared';
-import { DEBATE_TIMER_SECONDS } from '@bunker/shared';
 import type { IRoomStore } from '../../store/RoomStore.js';
 import type { ContentData } from '../../content/ContentData.js';
 import type { RoomManager } from '../../services/RoomManager.js';
@@ -278,8 +277,9 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     const orderPayload: DebateOrderPayload = { orderedPlayerIds, currentSpeakerIndex: 0 };
     io.to(room.roomId).emit(EVENTS.DEBATE_ORDER, orderPayload);
 
-    // Start countdown — when it ends, just signal (no auto-advance to vote)
-    timerService.startDebateTimer(room.roomId, DEBATE_TIMER_SECONDS, () => {
+    // Start countdown: 1 minute per active player, no auto-advance to vote
+    const timerSeconds = orderedPlayerIds.length * 60;
+    timerService.startDebateTimer(room.roomId, timerSeconds, () => {
       const r = roomStore.getRoom(room.roomId);
       if (!r || r.currentPhase !== 'DEBATE') return;
       io.to(room.roomId).emit(EVENTS.TIMER_ENDED, {});

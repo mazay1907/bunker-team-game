@@ -35,6 +35,8 @@ interface PlayerListProps {
   isHost?: boolean;
   /** Player ID of the current debate speaker (highlights their row) */
   currentSpeakerId?: string | null;
+  /** Players who submitted in REVEAL phase but whose traits are still hidden */
+  revealSubmittedIds?: string[];
 }
 
 export function PlayerList({
@@ -48,6 +50,7 @@ export function PlayerList({
   onKick,
   isHost = false,
   currentSpeakerId = null,
+  revealSubmittedIds = [],
 }: PlayerListProps): JSX.Element {
   const isVotePhase = onVote !== undefined;
 
@@ -58,6 +61,7 @@ export function PlayerList({
         const isEliminated = player.status === 'SPECTATOR';
         const isReconnecting = player.status === 'RECONNECTING';
         const isSpeaking = currentSpeakerId === player.playerId && !isEliminated;
+        const hasSubmittedReveal = revealSubmittedIds.includes(player.playerId);
         const voteCount = voteTally[player.playerId] ?? 0;
         const canVoteFor =
           isVotePhase &&
@@ -110,6 +114,9 @@ export function PlayerList({
               )}
               {isSpeaking && (
                 <span className="font-inter text-xs text-bunker-hot shrink-0 animate-pulse">🎤</span>
+              )}
+              {hasSubmittedReveal && !isEliminated && (
+                <span className="font-inter text-xs text-bunker-success shrink-0" title="Вже вибрав">✓</span>
               )}
 
               {/* Vote count badge — only after all have voted */}

@@ -57,6 +57,7 @@ interface GameState {
 
   // Reveal phase
   revealWaitingFor: number;
+  revealSubmittedIds: string[]; // players who submitted this round (traits hidden until isFinal)
 
   // Timer
   debateTimer: number | null;
@@ -99,6 +100,7 @@ interface GameState {
   setDebateCurrentSpeakerIndex: (index: number) => void;
   setIsRevealed: (val: boolean) => void;
   setRevealWaitingFor: (count: number) => void;
+  addRevealSubmitted: (playerId: string) => void;
   setGameEnded: (payload: GameState['gameEnded']) => void;
   reset: () => void;
   resetRound: () => void;
@@ -118,6 +120,7 @@ const initialState = {
   tiebreaker: null,
   disconnectedVoterPrompt: null,
   revealWaitingFor: 0,
+  revealSubmittedIds: [],
   debateTimer: null,
   debateTimerEnded: false,
   debateSpeakingOrder: [],
@@ -185,12 +188,19 @@ export const useGameStore = create<GameState>((set) => ({
 
   setRevealWaitingFor: (revealWaitingFor) => set({ revealWaitingFor }),
 
+  addRevealSubmitted: (playerId) =>
+    set((state) => ({
+      revealSubmittedIds: state.revealSubmittedIds.includes(playerId)
+        ? state.revealSubmittedIds
+        : [...state.revealSubmittedIds, playerId],
+    })),
+
   setGameEnded: (gameEnded) => set({ gameEnded }),
 
   resetRound: () =>
     set({
       votes: [], voteTally: {}, tiebreaker: null, disconnectedVoterPrompt: null,
-      isRevealed: false, revealWaitingFor: 0,
+      isRevealed: false, revealWaitingFor: 0, revealSubmittedIds: [],
       debateTimer: null, debateTimerEnded: false,
       debateSpeakingOrder: [], debateCurrentSpeakerIndex: 0,
     }),

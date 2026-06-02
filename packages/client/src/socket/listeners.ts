@@ -131,24 +131,29 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
 
   // ── reveal:update — a player revealed traits ─────────────────────────────
   const onRevealUpdate = (payload: RevealUpdatePayload): void => {
+    store.setRevealWaitingFor(payload.waitingFor);
+
+    if (!payload.isFinal) {
+      // Blind phase: record who submitted without showing traits
+      store.addRevealSubmitted(payload.playerId);
+      return;
+    }
+
+    // Final reveal: now make all traits visible
     const current = useGameStore.getState();
     const player = current.players.find((p) => p.playerId === payload.playerId);
-    if (player) {
-      // Merge revealed traits with existing visible traits
-      const existingTraits = player.visibleTraits;
+    if (player && payload.revealedTraits.length > 0) {
       const newTraitCategories = new Set(payload.revealedTraits.map((t) => t.category));
       const merged = [
-        ...existingTraits.filter((t) => !newTraitCategories.has(t.category)),
+        ...player.visibleTraits.filter((t) => !newTraitCategories.has(t.category)),
         ...payload.revealedTraits,
       ];
       store.updatePlayer({ ...player, visibleTraits: merged });
     }
-    // Track how many players still need to submit
-    store.setRevealWaitingFor(payload.waitingFor);
-    // Mark own reveal as submitted and update ownCharacter so alreadyRevealedCats is accurate in future rounds
+
+    // Sync ownCharacter.traits.isRevealed so future rounds block already-revealed categories
     const ownId = useGameStore.getState().ownPlayerId;
-    if (payload.playerId === ownId) {
-      store.setIsRevealed(true);
+    if (payload.playerId === ownId && payload.revealedTraits.length > 0) {
       const { ownCharacter } = useGameStore.getState();
       if (ownCharacter) {
         const updatedTraits = { ...ownCharacter.traits };

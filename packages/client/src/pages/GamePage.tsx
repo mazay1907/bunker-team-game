@@ -9,7 +9,7 @@
  * - Game-over screen
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { HelpCircle } from 'lucide-react';
 import { EVENTS, TRAIT_CATEGORIES } from '@bunker/shared';
@@ -25,8 +25,10 @@ import type {
   HostEndSessionAck,
   HostStartDebateTimerAck,
   HostNextSpeakerAck,
+  RoomJoinPayload,
+  RoomJoinAck,
 } from '@bunker/shared';
-import { socket } from '../socket/socket.js';
+import { socket, getCookie, setCookie, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { t } from '../i18n/t.js';
 import { registerSocketListeners } from '../socket/listeners.js';
@@ -264,7 +266,7 @@ function GamePage(): JSX.Element {
     debateTimer, debateTimerEnded, debateSpeakingOrder, debateCurrentSpeakerIndex,
     tiebreaker, isRevealed, votes, voteTally, gameEnded,
     disconnectedVoterPrompt, setDisconnectedVoterPrompt,
-    revealWaitingFor,
+    revealWaitingFor, revealSubmittedIds,
   } = useGameStore();
 
   const [selectedCats, setSelectedCats] = useState<TraitCategory[]>([]);
@@ -275,14 +277,61 @@ function GamePage(): JSX.Element {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>('card');
+  const joinCalledRef = useRef(false);
 
   useEffect(() => {
+    const store = useGameStore.getState();
     const cleanup = registerSocketListeners({
       onKicked: () => navigate('/', { replace: true }),
       onRoomClosed: () => navigate('/', { replace: true, state: { message: t('end.thankYou') } }),
     });
+
+    // If room is already in store (normal navigation from LobbyPage) skip reconnect
+    if (store.room) return cleanup;
+
+    // Full page reload — room cleared from memory, attempt reconnect using cookies
+    const reconnectToken = getCookie(RECONNECT_TOKEN_KEY);
+    if (!reconnectToken) { navigate('/'); return cleanup; }
+
+    // Guard against React StrictMode double-invoke
+    if (joinCalledRef.current) return cleanup;
+    joinCalledRef.current = true;
+
+    const run = async (): Promise<void> => {
+      if (!socket.connected) {
+        socket.connect();
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('connect timeout')), 5000);
+          socket.once('connect', () => { clearTimeout(timer); resolve(); });
+          socket.once('connect_error', (err) => { clearTimeout(timer); reject(err); });
+        });
+      }
+      await new Promise<void>((resolve) => {
+        const payload: RoomJoinPayload = {
+          roomCode: (roomCode ?? '').toUpperCase(),
+          nickname: '',
+          sessionToken: getCookie(SESSION_TOKEN_KEY),
+        };
+        socket.emit(EVENTS.ROOM_JOIN, payload, (ack: RoomJoinAck) => {
+          if (ack.ok) {
+            useGameStore.getState().setOwnPlayer(ack.player.playerId, ack.player.nickname);
+            setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+            // If room returned to LOBBY state, send player back to the lobby page
+            if (ack.room.state === 'LOBBY' || ack.room.state === 'SCENARIO_PICK') {
+              navigate(`/r/${roomCode ?? ''}`, { replace: true });
+            }
+          } else {
+            navigate('/');
+          }
+          resolve();
+        });
+      });
+    };
+
+    run().catch(() => navigate('/'));
     return cleanup;
-  }, [navigate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Reset per-phase state when phase changes
   useEffect(() => {
@@ -320,10 +369,25 @@ function GamePage(): JSX.Element {
   // ── Reveal submit ────────────────────────────────────────────────────────
   const handleRevealSubmit = useCallback((): void => {
     if (selectedCats.length !== quota) return;
-    socket.emit(EVENTS.REVEAL_SUBMIT, { categories: selectedCats }, (ack: RevealSubmitAck) => {
+    const cats = [...selectedCats];
+    socket.emit(EVENTS.REVEAL_SUBMIT, { categories: cats }, (ack: RevealSubmitAck) => {
       if (!ack.ok) {
         const errKey = `error.${ack.error}` as Parameters<typeof t>[0];
         setSubmitError(t(errKey));
+        return;
+      }
+      // Blind reveal: server won't send own traits until all submit.
+      // Update own character and submitted state immediately from the ack.
+      const store = useGameStore.getState();
+      store.setIsRevealed(true);
+      if (store.ownPlayerId) store.addRevealSubmitted(store.ownPlayerId);
+      const { ownCharacter } = store;
+      if (ownCharacter) {
+        const updatedTraits = { ...ownCharacter.traits };
+        for (const cat of cats) {
+          updatedTraits[cat] = { ...updatedTraits[cat], isRevealed: true };
+        }
+        store.setOwnCharacter({ ...ownCharacter, traits: updatedTraits });
       }
     });
   }, [selectedCats, quota]);
@@ -554,6 +618,7 @@ function GamePage(): JSX.Element {
         currentSpeakerId={phase === 'DEBATE'
           ? (debateSpeakingOrder[debateCurrentSpeakerIndex] ?? null)
           : null}
+        revealSubmittedIds={phase === 'REVEAL' ? revealSubmittedIds : []}
       />
     </div>
   );
