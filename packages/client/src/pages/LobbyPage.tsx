@@ -179,7 +179,8 @@ function LobbyPage(): JSX.Element {
     }
   }, [room?.state, roomCode, navigate]);
 
-  const doJoin = useCallback(async (joiningNickname: string): Promise<void> => {
+  /** Returns the error code on failure, null on success */
+  const doJoin = useCallback(async (joiningNickname: string): Promise<string | null> => {
     setIsJoining(true);
 
     if (!socket.connected) {
@@ -198,26 +199,28 @@ function LobbyPage(): JSX.Element {
       sessionToken,
     };
 
-    await new Promise<void>((resolve) => {
+    const errorCode = await new Promise<string | null>((resolve) => {
       socket.emit(EVENTS.ROOM_JOIN, payload, (ack: RoomJoinAck) => {
         if (ack.ok) {
-          // room:state event (sent by server before this ack) sets room + players
-          // — we only need to update identity and persist the reconnect token here.
           setOwnPlayer(ack.player.playerId, ack.player.nickname);
           setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
-          // Only claim session on reconnect — fresh joins must not displace another tab's session
           if (!isFreshJoin.current) {
             claimSession();
           }
+          resolve(null);
         } else {
-          const errKey = `error.${ack.error}` as Parameters<typeof t>[0];
-          setLastError(t(errKey));
+          resolve(ack.error);
         }
-        resolve();
       });
     });
 
+    if (errorCode) {
+      const errKey = `error.${errorCode}` as Parameters<typeof t>[0];
+      setLastError(t(errKey));
+    }
+
     setIsJoining(false);
+    return errorCode;
   }, [roomCode, setOwnPlayer, setLastError]);
 
   useEffect(() => {
@@ -252,11 +255,21 @@ function LobbyPage(): JSX.Element {
       isFreshJoin.current = true;
     }
 
-    void doJoin(nickname ?? '').catch((err: unknown) => {
-      console.error('[LobbyPage] join error:', err);
-      setLastError(t('error.networkError'));
-      setIsJoining(false);
-    });
+    void (async () => {
+      try {
+        const err = await doJoin(nickname ?? '');
+        // Old reconnect token didn't match this room → fall back to nickname form
+        if (err === 'INVALID_NICKNAME') {
+          setLastError(null);
+          joinCalledRef.current = false;
+          setNeedsNickname(true);
+        }
+      } catch (err) {
+        console.error('[LobbyPage] join error:', err);
+        setLastError(t('error.networkError'));
+        setIsJoining(false);
+      }
+    })();
 
     return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -289,11 +302,15 @@ function LobbyPage(): JSX.Element {
     if (trimmed.length < 2) return;
     isFreshJoin.current = true;
     setNeedsNickname(false);
-    void doJoin(trimmed).catch((err: unknown) => {
-      console.error('[LobbyPage] direct join error:', err);
-      setLastError(t('error.networkError'));
-      setIsJoining(false);
-    });
+    void (async () => {
+      try {
+        await doJoin(trimmed);
+      } catch (err) {
+        console.error('[LobbyPage] direct join error:', err);
+        setLastError(t('error.networkError'));
+        setIsJoining(false);
+      }
+    })();
   }, [directNickname, doJoin, setLastError]);
 
   const ownPlayer = players.find((p) => p.playerId === ownPlayerId);
