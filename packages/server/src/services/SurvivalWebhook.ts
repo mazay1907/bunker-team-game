@@ -4,6 +4,22 @@ import type { Player, Scenario, SurvivalPredictionPayload } from '@bunker/shared
 
 const SURVIVAL_WEBHOOK_URL = 'https://primary-production-dd401.up.railway.app/webhook/bunker';
 
+/**
+ * Server-side cache: roomId → prediction text.
+ * Kept until the host calls host:endSession (room deleted).
+ * Allows late-connecting or reconnecting clients to receive the prediction
+ * even if the SURVIVAL_PREDICTION event was emitted before they connected.
+ */
+const predictionCache = new Map<string, string>();
+
+export function getCachedPrediction(roomId: string): string | null {
+  return predictionCache.get(roomId) ?? null;
+}
+
+export function clearPredictionCache(roomId: string): void {
+  predictionCache.delete(roomId);
+}
+
 export async function callSurvivalWebhook(
   roomId: string,
   scenario: Scenario,
@@ -38,6 +54,9 @@ export async function callSurvivalWebhook(
     } catch {
       // use raw text
     }
+
+    // Cache before emitting so any player who reconnects after this point also gets it
+    predictionCache.set(roomId, prediction);
 
     const predPayload: SurvivalPredictionPayload = { prediction };
     ioServer.to(roomId).emit(EVENTS.SURVIVAL_PREDICTION, predPayload);

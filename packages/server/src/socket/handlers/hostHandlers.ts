@@ -52,7 +52,7 @@ import type { TimerService } from '../../services/TimerService.js';
 import type { CharacterDealer } from '../../services/CharacterDealer.js';
 import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 import { emitAnalytics } from '../../services/Analytics.js';
-import { callSurvivalWebhook } from '../../services/SurvivalWebhook.js';
+import { callSurvivalWebhook, clearPredictionCache } from '../../services/SurvivalWebhook.js';
 import { startRevealPhaseTimer } from './revealHandlers.js';
 
 /** Server-side speaking order state per room — not in shared types */
@@ -472,6 +472,7 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     if (room.state !== 'ENDED') return ack({ ok: false, error: 'WRONG_PHASE' });
 
     timerService.clearAll(room.roomId);
+    clearPredictionCache(room.roomId);
 
     const closedPayload: RoomClosedPayload = { message: 'Дякуємо за гру' };
     io.to(room.roomId).emit(EVENTS.ROOM_CLOSED, closedPayload);

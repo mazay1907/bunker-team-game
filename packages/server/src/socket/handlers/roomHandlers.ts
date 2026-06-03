@@ -41,6 +41,7 @@ import type { TimerService } from '../../services/TimerService.js';
 import type { GameStateMachine } from '../../services/GameStateMachine.js';
 import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 import { emitAnalytics } from '../../services/Analytics.js';
+import { getCachedPrediction } from '../../services/SurvivalWebhook.js';
 
 // Zod schema for room:join payload validation
 // nickname min(2) is NOT enforced here — reconnect sends empty string and is valid.
@@ -137,6 +138,13 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
                 };
                 socket.emit(EVENTS.ROOM_STATE, statePayload);
 
+                // If the game ended while this player was away and the AI prediction
+                // already arrived, send it now so they don't see the loading spinner forever.
+                const cachedPrediction = getCachedPrediction(room.roomId);
+                if (cachedPrediction) {
+                  socket.emit(EVENTS.SURVIVAL_PREDICTION, { prediction: cachedPrediction });
+                }
+
                 if (player.status === 'KICKED') {
                   // Kicked player re-entering — others removed them from their list, re-add via PLAYER_JOINED
                   const playerView = roomManager.toPlayerView(updatedPlayer!, updatedRoom, existingPlayerId);
@@ -200,6 +208,10 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
                 ownCharacter: rp.character ?? null,
                 game: null,
               } satisfies RoomStatePayload);
+              const namePrediction = getCachedPrediction(room.roomId);
+              if (namePrediction) {
+                socket.emit(EVENTS.SURVIVAL_PREDICTION, { prediction: namePrediction });
+              }
               socket.to(room.roomId).emit(EVENTS.PLAYER_RECONNECTED, { playerId: byNick.playerId } satisfies PlayerReconnectedPayload);
               console.log(`[room:join] name-reconnect "${byNick.nickname}" in ${room.roomCode}`);
               return ack({ ok: true, player: roomManager.toPlayerView(rp, rr, byNick.playerId), room: roomManager.toRoomView(rr, contentData), reconnectToken: newRcToken });
