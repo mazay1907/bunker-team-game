@@ -30,6 +30,8 @@ export const EVENTS = {
   PLAYER_RECONNECTING: 'player:reconnecting',
   PLAYER_RECONNECTED: 'player:reconnected',
   PLAYER_KICKED: 'player:kicked',
+  PLAYER_RENAME: 'player:rename',
+  PLAYER_RENAMED: 'player:renamed',
 
   // Host events
   HOST_KICK: 'host:kick',
@@ -94,6 +96,7 @@ export type HostStartDebateTimerError = 'NOT_HOST' | 'WRONG_PHASE' | 'ALREADY_RU
 export type HostNextSpeakerError = 'NOT_HOST' | 'WRONG_PHASE';
 export type RevealSubmitError = 'WRONG_PHASE' | 'WRONG_COUNT' | 'ALREADY_REVEALED' | 'ALREADY_SUBMITTED';
 export type VoteSubmitError = 'WRONG_PHASE' | 'SELF_VOTE' | 'ALREADY_VOTED' | 'INVALID_TARGET';
+export type PlayerRenameError = 'WRONG_PHASE' | 'INVALID_NICKNAME' | 'NICKNAME_TAKEN';
 
 // ─── Client → Server payloads ─────────────────────────────────────────────────
 
@@ -268,6 +271,20 @@ export interface DebateSpeakerChangedPayload {
 /** Sent after the AI webhook responds with a humanity survival prediction */
 export interface SurvivalPredictionPayload {
   prediction: string;
+}
+
+export interface PlayerRenamePayload {
+  newNickname: string;
+}
+
+export interface PlayerRenameAck {
+  ok: boolean;
+  error?: PlayerRenameError;
+}
+
+export interface PlayerRenamedPayload {
+  playerId: string;
+  newNickname: string;
 }
 
 // ─── HTTP API types ──────────────────────────────────────────────────────────────

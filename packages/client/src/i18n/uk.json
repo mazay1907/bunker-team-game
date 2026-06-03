@@ -42,6 +42,10 @@
   "game.reveal.waiting": "Очікуємо на {{count}} гравців",
   "game.reveal.alreadySubmitted": "Ви вже розкрили характеристики в цьому раунді",
 
+  "game.rename.placeholder": "Нове ім'я персонажа",
+  "game.rename.hint": "Змінити ім'я",
+  "error.NICKNAME_TAKEN": "Таке ім'я вже зайнято",
+
   "game.vote.prompt": "Кого виключити з бункера?",
   "game.vote.confirm": "Підтвердити голос",
   "game.vote.waiting": "Очікуємо на {{count}} голосів",

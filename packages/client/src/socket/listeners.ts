@@ -31,6 +31,7 @@ import type {
   DebateOrderPayload,
   DebateSpeakerChangedPayload,
   SurvivalPredictionPayload,
+  PlayerRenamedPayload,
 } from '@bunker/shared';
 
 interface ListenerOptions {
@@ -271,6 +272,11 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
     options?.onKicked?.();
   };
 
+  // ── player:renamed — a player changed their in-game nickname ─────────────
+  const onPlayerRenamed = (payload: PlayerRenamedPayload): void => {
+    store.renamePlayer(payload.playerId, payload.newNickname);
+  };
+
   // ── host:disconnectedVoterPrompt — host action needed for voter ───────────
   const onDisconnectedVoterPrompt = (payload: HostDisconnectedVoterPromptPayload): void => {
     store.setDisconnectedVoterPrompt({
@@ -293,6 +299,7 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
   // Register all listeners
   socket.on(EVENTS.ROOM_CLOSED, onRoomClosed);
   socket.on(EVENTS.PLAYER_KICKED, onPlayerKicked);
+  socket.on(EVENTS.PLAYER_RENAMED, onPlayerRenamed);
   socket.on(EVENTS.HOST_DISCONNECTED_VOTER_PROMPT, onDisconnectedVoterPrompt);
   socket.on(EVENTS.ROOM_STATE, onRoomState);
   socket.on(EVENTS.PLAYER_JOINED, onPlayerJoined);
@@ -321,6 +328,7 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
   return () => {
     socket.off(EVENTS.ROOM_CLOSED, onRoomClosed);
     socket.off(EVENTS.PLAYER_KICKED, onPlayerKicked);
+    socket.off(EVENTS.PLAYER_RENAMED, onPlayerRenamed);
     socket.off(EVENTS.HOST_DISCONNECTED_VOTER_PROMPT, onDisconnectedVoterPrompt);
     socket.off(EVENTS.ROOM_STATE, onRoomState);
     socket.off(EVENTS.PLAYER_JOINED, onPlayerJoined);

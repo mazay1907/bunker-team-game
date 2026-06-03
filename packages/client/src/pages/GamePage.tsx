@@ -11,7 +11,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, Pencil } from 'lucide-react';
 import { EVENTS, TRAIT_CATEGORIES } from '@bunker/shared';
 import type {
   TraitCategory,
@@ -28,6 +28,7 @@ import type {
   HostNextSpeakerAck,
   RoomJoinPayload,
   RoomJoinAck,
+  PlayerRenameAck,
 } from '@bunker/shared';
 import { socket, getCookie, setCookie, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
@@ -331,6 +332,9 @@ function GamePage(): JSX.Element {
   const [showReconnectForm, setShowReconnectForm] = useState(false);
   const [reconnectName, setReconnectName] = useState('');
   const [reconnectError, setReconnectError] = useState<string | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameError, setRenameError] = useState<string | null>(null);
   const joinCalledRef = useRef(false);
 
   useEffect(() => {
@@ -552,6 +556,21 @@ function GamePage(): JSX.Element {
     };
     run().catch(() => setReconnectError(t('game.reconnect.errorNotFound')));
   }, [reconnectName, roomCode]);
+
+  // ── Rename own nickname (REVEAL phase) ────────────────────────────────────
+  const handleRename = useCallback((): void => {
+    const trimmed = renameValue.trim();
+    if (trimmed.length < 2 || trimmed === ownNickname) { setIsRenaming(false); return; }
+    socket.emit(EVENTS.PLAYER_RENAME, { newNickname: trimmed }, (ack: PlayerRenameAck) => {
+      if (ack.ok) {
+        setIsRenaming(false);
+        setRenameError(null);
+      } else {
+        const errKey = `error.${ack.error ?? 'networkError'}` as Parameters<typeof t>[0];
+        setRenameError(t(errKey));
+      }
+    });
+  }, [renameValue, ownNickname]);
 
   // ── Early return after all hooks ──────────────────────────────────────────
   if (gameEnded) return <GameOverScreen />;
@@ -870,9 +889,45 @@ function GamePage(): JSX.Element {
           <PhaseLabel phase={phase} />
           <div className="flex items-center gap-2 md:gap-3">
             {ownNickname && (
-              <span className="font-inter text-sm text-bunker-text/80 bg-bunker-surface border border-bunker-border px-2 py-0.5 rounded truncate max-w-[100px]">
-                {ownNickname}
-              </span>
+              phase === 'REVEAL' && isRenaming ? (
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1">
+                    <input
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => { setRenameValue(e.target.value); setRenameError(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRename();
+                        if (e.key === 'Escape') setIsRenaming(false);
+                      }}
+                      maxLength={20}
+                      className="w-24 h-7 px-2 text-xs font-inter text-bunker-text bg-bunker-bg border border-bunker-hot rounded focus:outline-none"
+                    />
+                    <button
+                      className="h-7 px-2 rounded bg-bunker-hot text-white font-inter text-xs hover:bg-bunker-glow transition-colors"
+                      onClick={handleRename}
+                    >✓</button>
+                  </div>
+                  {renameError && (
+                    <span className="font-inter text-xs text-bunker-danger">{renameError}</span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <span className="font-inter text-sm text-bunker-text/80 bg-bunker-surface border border-bunker-border px-2 py-0.5 rounded truncate max-w-[100px]">
+                    {ownNickname}
+                  </span>
+                  {phase === 'REVEAL' && !isSpectator && (
+                    <button
+                      className="p-1 text-bunker-muted/50 hover:text-bunker-muted transition-colors"
+                      onClick={() => { setRenameValue(ownNickname); setRenameError(null); setIsRenaming(true); }}
+                      title={t('game.rename.hint')}
+                    >
+                      <Pencil size={11} />
+                    </button>
+                  )}
+                </div>
+              )
             )}
             <span className="hidden sm:inline font-mono text-sm text-bunker-muted/60">{roomCode}</span>
             <button

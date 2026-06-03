@@ -31,6 +31,8 @@ import type {
   RoomStatePayload,
   HostTransferredPayload,
   PlayerEliminatedPayload,
+  PlayerRenameAck,
+  PlayerRenamedPayload,
 } from '@bunker/shared';
 import type { IRoomStore } from '../../store/RoomStore.js';
 import type { ISessionStore } from '../../store/SessionStore.js';
@@ -50,6 +52,10 @@ const roomJoinSchema = z.object({
   roomCode: z.string().regex(/^[A-Z0-9]{6}$/, 'Invalid room code format'),
   nickname: z.string().trim().max(20),
   sessionToken: z.string().nullable(),
+});
+
+const renameSchema = z.object({
+  newNickname: z.string().trim().min(2).max(20),
 });
 
 interface HandlerDeps {
@@ -303,6 +309,42 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
         });
         return ack({ ok: false, error: 'ROOM_NOT_FOUND' });
       }
+    },
+  );
+
+  // ── player:rename — change own in-game nickname (REVEAL phase only) ─────────
+  socket.on(
+    EVENTS.PLAYER_RENAME,
+    (payload: unknown, ack: (res: PlayerRenameAck) => void) => {
+      const playerId = socket.data.playerId as string | undefined;
+      if (!playerId) return ack({ ok: false, error: 'INVALID_NICKNAME' });
+
+      const parsed = renameSchema.safeParse(payload);
+      if (!parsed.success) return ack({ ok: false, error: 'INVALID_NICKNAME' });
+
+      const { newNickname } = parsed.data;
+      const found = roomManager.findPlayerById(playerId);
+      if (!found) return ack({ ok: false, error: 'INVALID_NICKNAME' });
+
+      const { room } = found;
+      const revealPhases = ['R1_REVEAL', 'R2_REVEAL', 'R3_REVEAL'];
+      if (!revealPhases.includes(room.state)) return ack({ ok: false, error: 'WRONG_PHASE' });
+
+      const duplicate = [...room.players.values()].find(
+        (p) => p.playerId !== playerId && p.nickname.toLowerCase() === newNickname.toLowerCase(),
+      );
+      if (duplicate) return ack({ ok: false, error: 'NICKNAME_TAKEN' });
+
+      roomStore.updateRoom(room.roomId, (r) => {
+        const player = r.players.get(playerId);
+        if (player) player.nickname = newNickname;
+        r.lastActivityAt = new Date();
+        return r;
+      });
+
+      const renamedPayload: PlayerRenamedPayload = { playerId, newNickname };
+      io.to(room.roomId).emit(EVENTS.PLAYER_RENAMED, renamedPayload);
+      ack({ ok: true });
     },
   );
 

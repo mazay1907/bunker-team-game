@@ -91,6 +91,7 @@ interface GameState {
   setOwnPlayer: (playerId: string, nickname: string) => void;
   updatePlayer: (updated: PlayerView) => void;
   removePlayer: (playerId: string) => void;
+  renamePlayer: (playerId: string, newNickname: string) => void;
   setLastError: (error: string | null) => void;
   setAvailableScenarios: (scenarios: Scenario[]) => void;
   addVote: (vote: VoteRecord) => void;
@@ -161,6 +162,14 @@ export const useGameStore = create<GameState>((set) => ({
   removePlayer: (playerId) =>
     set((state) => ({
       players: state.players.filter((p) => p.playerId !== playerId),
+    })),
+
+  renamePlayer: (playerId, newNickname) =>
+    set((state) => ({
+      players: state.players.map((p) =>
+        p.playerId === playerId ? { ...p, nickname: newNickname } : p,
+      ),
+      ownNickname: state.ownPlayerId === playerId ? newNickname : state.ownNickname,
     })),
 
   setLastError: (lastError) => set({ lastError }),
