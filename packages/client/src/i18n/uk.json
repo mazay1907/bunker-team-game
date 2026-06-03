@@ -18,7 +18,7 @@
   "lobby.copyLink": "Скопіювати посилання",
   "lobby.linkCopied": "Скопійовано!",
   "lobby.startGame": "Почати гру",
-  "lobby.waitingForPlayers": "Потрібно щонайменше 6 гравців",
+  "lobby.waitingForPlayers": "Потрібно щонайменше 5 гравців",
   "lobby.tooManyPlayers": "Максимум 10 гравців",
   "lobby.playerCount": "Гравців: {{count}}",
   "lobby.host": "ведучий",
@@ -161,6 +161,14 @@
   "howToPlay.voting.tie": "Нічия → переголосування між зрівнялими → вирішальний голос ведучого",
   "howToPlay.character.title": "Ваш персонаж",
   "howToPlay.character.body": "7 характеристик: стать/вік, професія, здоров'я, хобі, фобія, багаж, таємний факт. Свою картку бачите повністю; інші — лише те, що ви вже розкрили.",
+
+  "game.debate.skipVoteNotice": "Голосування в 1-му раунді пропускається (5 гравців)",
+
+  "game.reconnect.title": "Підключення до гри",
+  "game.reconnect.prompt": "Введіть своє ім'я щоб повернутися до кімнати",
+  "game.reconnect.namePlaceholder": "Ваш нікнейм",
+  "game.reconnect.button": "Підключитись",
+  "game.reconnect.errorNotFound": "Гравця з таким ім'ям не знайдено або гра завершена",
 
   "game.loading": "Завантаження…",
   "lobby.connecting": "Підключаємось…",

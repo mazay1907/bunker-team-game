@@ -14,7 +14,9 @@ interface ScenarioCardProps {
 }
 
 export function ScenarioCard({ scenario, collapsed, playerCount }: ScenarioCardProps): JSX.Element {
-  const capacity = playerCount !== undefined ? Math.max(playerCount - 3, 1) : scenario.bunkerConditions.capacity;
+  const capacity = playerCount !== undefined
+    ? (playerCount === 5 ? 3 : Math.max(playerCount - 3, 1))
+    : scenario.bunkerConditions.capacity;
   if (collapsed) {
     return (
       <div className="px-4 py-2 bg-bunker-surface border border-bunker-border rounded flex items-center gap-2">

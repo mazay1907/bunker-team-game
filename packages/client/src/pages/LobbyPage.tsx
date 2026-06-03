@@ -123,7 +123,7 @@ function ScenarioPicker({ isHost, playerCount, onPick }: ScenarioPickerProps): J
                 {s.description}
               </p>
               <div className="flex gap-4 mt-2 text-xs text-bunker-muted/70 font-mono">
-                <span>{t('game.capacity')}: {Math.max(playerCount - 3, 1)}</span>
+                <span>{t('game.capacity')}: {playerCount === 5 ? 3 : Math.max(playerCount - 3, 1)}</span>
                 <span>{t('game.supplyDuration')}: {s.bunkerConditions.supplyDuration}</span>
               </div>
             </button>
@@ -316,7 +316,7 @@ function LobbyPage(): JSX.Element {
   const ownPlayer = players.find((p) => p.playerId === ownPlayerId);
   const isHost = ownPlayer?.isHost ?? false;
   const playerCount = players.length;
-  const canStart = playerCount >= 6 && playerCount <= 10;
+  const canStart = playerCount >= 5 && playerCount <= 10;
   const isScenarioPick = room?.state === 'SCENARIO_PICK';
 
   if (needsNickname) {
@@ -520,7 +520,7 @@ function LobbyPage(): JSX.Element {
               disabled={!canStart}
               onClick={handleStartGame}
               title={
-                playerCount < 6
+                playerCount < 5
                   ? t('lobby.waitingForPlayers')
                   : playerCount > 10
                     ? t('lobby.tooManyPlayers')
@@ -529,7 +529,7 @@ function LobbyPage(): JSX.Element {
             >
               🚀 {t('lobby.startGame')}
             </button>
-            {playerCount < 6 && (
+            {playerCount < 5 && (
               <p className="font-inter text-sm text-bunker-muted text-center">
                 {t('lobby.waitingForPlayers')}
               </p>

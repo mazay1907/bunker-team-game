@@ -169,6 +169,42 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
           if (room.state === 'ENDED') {
             return ack({ ok: false, error: 'ROOM_NOT_FOUND' });
           }
+          // Name-based reconnect: token is lost (browser crash, new device) but player can
+          // rejoin by matching their exact nickname in the active room
+          if (nickname.trim().length >= 2) {
+            const byNick = [...room.players.values()].find(
+              (p) => p.nickname === nickname.trim() &&
+                (p.status === 'ACTIVE' || p.status === 'RECONNECTING'),
+            );
+            if (byNick) {
+              const newRcToken = randomBytes(32).toString('hex');
+              timerService.clearReconnectTimer(room.roomId, byNick.playerId);
+              if (room.hostPlayerId === byNick.playerId) {
+                timerService.cancelHostTransferTimer(room.roomId);
+              }
+              reconnectStore.set(newRcToken, byNick.playerId);
+              roomStore.updateRoom(room.roomId, (r) => {
+                const p = r.players.get(byNick.playerId);
+                if (p) r.players.set(byNick.playerId, { ...p, socketId: socket.id, status: 'ACTIVE', disconnectedAt: null });
+                r.lastActivityAt = new Date();
+                return r;
+              });
+              socket.data.playerId = byNick.playerId;
+              sessionStore.set(byNick.sessionToken, byNick.playerId);
+              await socket.join(room.roomId);
+              const rr = roomStore.getRoom(room.roomId)!;
+              const rp = rr.players.get(byNick.playerId)!;
+              socket.emit(EVENTS.ROOM_STATE, {
+                room: roomManager.toRoomView(rr, contentData),
+                players: roomManager.getPlayerViews(rr, byNick.playerId),
+                ownCharacter: rp.character ?? null,
+                game: null,
+              } satisfies RoomStatePayload);
+              socket.to(room.roomId).emit(EVENTS.PLAYER_RECONNECTED, { playerId: byNick.playerId } satisfies PlayerReconnectedPayload);
+              console.log(`[room:join] name-reconnect "${byNick.nickname}" in ${room.roomCode}`);
+              return ack({ ok: true, player: roomManager.toPlayerView(rp, rr, byNick.playerId), room: roomManager.toRoomView(rr, contentData), reconnectToken: newRcToken });
+            }
+          }
           return ack({ ok: false, error: 'GAME_IN_PROGRESS' });
         }
 

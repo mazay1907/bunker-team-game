@@ -324,6 +324,9 @@ function GamePage(): JSX.Element {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>('card');
+  const [showReconnectForm, setShowReconnectForm] = useState(false);
+  const [reconnectName, setReconnectName] = useState('');
+  const [reconnectError, setReconnectError] = useState<string | null>(null);
   const joinCalledRef = useRef(false);
 
   useEffect(() => {
@@ -338,7 +341,11 @@ function GamePage(): JSX.Element {
 
     // Full page reload — room cleared from memory, attempt reconnect using cookies
     const reconnectToken = getCookie(RECONNECT_TOKEN_KEY);
-    if (!reconnectToken) { navigate('/'); return cleanup; }
+    if (!reconnectToken) {
+      // No cookie — show manual reconnect form instead of redirecting away
+      setShowReconnectForm(true);
+      return cleanup;
+    }
 
     // Guard against React StrictMode double-invoke
     if (joinCalledRef.current) return cleanup;
@@ -504,9 +511,75 @@ function GamePage(): JSX.Element {
     setDisconnectedVoterPrompt(null);
   }, [setDisconnectedVoterPrompt]);
 
+  // ── Manual reconnect (when cookie lost) ─────────────────────────────────
+  const handleManualReconnect = useCallback((): void => {
+    if (reconnectName.trim().length < 2) return;
+    setReconnectError(null);
+    const run = async (): Promise<void> => {
+      if (!socket.connected) {
+        socket.connect();
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('timeout')), 5000);
+          socket.once('connect', () => { clearTimeout(timer); resolve(); });
+          socket.once('connect_error', (err) => { clearTimeout(timer); reject(err); });
+        });
+      }
+      const payload: RoomJoinPayload = {
+        roomCode: (roomCode ?? '').toUpperCase(),
+        nickname: reconnectName.trim(),
+        sessionToken: null,
+      };
+      socket.emit(EVENTS.ROOM_JOIN, payload, (ack: RoomJoinAck) => {
+        if (ack.ok) {
+          useGameStore.getState().setOwnPlayer(ack.player.playerId, ack.player.nickname);
+          setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+          setShowReconnectForm(false);
+        } else {
+          setReconnectError(t('game.reconnect.errorNotFound'));
+        }
+      });
+    };
+    run().catch(() => setReconnectError(t('game.reconnect.errorNotFound')));
+  }, [reconnectName, roomCode]);
+
   // ── Early return after all hooks ──────────────────────────────────────────
-  if (!room || gameEnded) {
-    if (gameEnded) return <GameOverScreen />;
+  if (gameEnded) return <GameOverScreen />;
+  if (!room) {
+    if (showReconnectForm) {
+      return (
+        <div className="min-h-screen bg-bunker-bg flex items-center justify-center p-4">
+          <div className="bg-bunker-surface border border-bunker-border rounded p-6 max-w-sm w-full flex flex-col gap-4">
+            <h2 className="font-oswald font-bold text-xl text-bunker-hot uppercase tracking-wider">
+              {t('game.reconnect.title')}
+            </h2>
+            <p className="font-inter text-sm text-bunker-muted">
+              {t('game.reconnect.prompt')}{' '}
+              <span className="font-mono text-bunker-text tracking-wider">{roomCode}</span>
+            </p>
+            <input
+              type="text"
+              value={reconnectName}
+              onChange={(e) => setReconnectName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleManualReconnect(); }}
+              placeholder={t('game.reconnect.namePlaceholder')}
+              maxLength={20}
+              autoFocus
+              className="h-12 px-4 rounded bg-bunker-bg border border-bunker-border text-bunker-text font-inter focus:outline-none focus:border-bunker-hot transition-colors duration-150"
+            />
+            {reconnectError && (
+              <p className="font-inter text-xs text-bunker-danger">{reconnectError}</p>
+            )}
+            <button
+              className={btnPrimary}
+              disabled={reconnectName.trim().length < 2}
+              onClick={handleManualReconnect}
+            >
+              {t('game.reconnect.button')}
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-bunker-bg flex items-center justify-center">
         <p className="font-oswald text-xl text-bunker-muted animate-pulse">{t('game.loading')}</p>
@@ -641,6 +714,11 @@ function GamePage(): JSX.Element {
   // ── Right column content (players + phase panel) ──────────────────────────
   const playersColumn = (
     <div className="flex flex-col gap-4">
+      {phase === 'DEBATE' && round === 1 && players.length === 5 && (
+        <div className="bg-bunker-surface border border-bunker-hot/30 rounded px-4 py-2 text-center">
+          <p className="font-inter text-xs text-bunker-hot">{t('game.debate.skipVoteNotice')}</p>
+        </div>
+      )}
       {phase === 'DEBATE' && (
         <DebateTimer
           remaining={debateTimer}

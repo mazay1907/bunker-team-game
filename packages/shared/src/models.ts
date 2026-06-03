@@ -188,7 +188,7 @@ export interface GameView {
 
 // ─── Game constants ──────────────────────────────────────────────────────────────
 
-export const MIN_PLAYERS = 6;
+export const MIN_PLAYERS = 5;
 export const MAX_PLAYERS = 10;
 export const TOTAL_ROUNDS = 3;
 export const REVEAL_QUOTAS: Record<1 | 2 | 3, 2 | 1> = { 1: 2, 2: 2, 3: 1 };

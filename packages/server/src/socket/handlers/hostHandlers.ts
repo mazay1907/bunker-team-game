@@ -123,9 +123,15 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     const nextIdx = state.currentSpeakerIndex + 1;
     if (nextIdx >= state.orderedPlayerIds.length) {
       debateSpeakingState.delete(roomId);
-      const voteState = r.currentRound === 1 ? 'R1_VOTE' : r.currentRound === 2 ? 'R2_VOTE' : 'R3_VOTE';
-      gsm.transitionTo(roomId, voteState);
-      startVoteTimer(roomId);
+      // 5-player mode: skip round 1 vote, go directly to R2_REVEAL
+      if (r.players.size === 5 && r.currentRound === 1) {
+        gsm.transitionTo(roomId, 'R2_REVEAL');
+        startRevealPhaseTimer(roomId, 2, { io, roomStore, roomManager, gsm, timerService });
+      } else {
+        const voteState = r.currentRound === 1 ? 'R1_VOTE' : r.currentRound === 2 ? 'R2_VOTE' : 'R3_VOTE';
+        gsm.transitionTo(roomId, voteState);
+        startVoteTimer(roomId);
+      }
     } else {
       debateSpeakingState.set(roomId, { ...state, currentSpeakerIndex: nextIdx, waitingForNext: false });
       const changedPayload: DebateSpeakerChangedPayload = { currentSpeakerIndex: nextIdx };
@@ -338,8 +344,14 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
 
     timerService.cancelTimer(room.roomId);
     debateSpeakingState.delete(room.roomId);
-    gsm.advance(room.roomId); // DEBATE → VOTE
-    startVoteTimer(room.roomId);
+    // 5-player mode: skip round 1 vote, go directly to R2_REVEAL
+    if (room.players.size === 5 && room.currentRound === 1) {
+      gsm.transitionTo(room.roomId, 'R2_REVEAL');
+      startRevealPhaseTimer(room.roomId, 2, { io, roomStore, roomManager, gsm, timerService });
+    } else {
+      gsm.advance(room.roomId); // DEBATE → VOTE
+      startVoteTimer(room.roomId);
+    }
     return ack({ ok: true });
   });
 
