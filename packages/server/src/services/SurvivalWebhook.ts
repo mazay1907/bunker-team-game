@@ -50,7 +50,7 @@ export async function callSurvivalWebhook(
     let prediction = text;
     try {
       const json = JSON.parse(text) as Record<string, unknown>;
-      prediction = String(json.prediction ?? json.message ?? json.response ?? json.text ?? json.content ?? text);
+      prediction = String(json.output ?? json.prediction ?? json.message ?? json.response ?? json.text ?? json.content ?? text);
     } catch {
       // use raw text
     }

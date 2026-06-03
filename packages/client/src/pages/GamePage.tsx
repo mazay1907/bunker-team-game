@@ -275,7 +275,11 @@ function GameOverScreen(): JSX.Element {
               {t('end.survivalPrediction')}
             </p>
             {survivalPrediction ? (
-              <p className="font-inter text-sm text-bunker-text leading-relaxed">{survivalPrediction}</p>
+              <div className="flex flex-col gap-2">
+                {survivalPrediction.split('\n\n').map((paragraph, i) => (
+                  <p key={i} className="font-inter text-sm text-bunker-text leading-relaxed">{paragraph}</p>
+                ))}
+              </div>
             ) : (
               <p className="font-inter text-sm text-bunker-muted/60 animate-pulse">
                 {t('end.predictionLoading')}
