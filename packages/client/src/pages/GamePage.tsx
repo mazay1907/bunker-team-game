@@ -135,7 +135,7 @@ function TiebreakerModal({
 
         {voted && (
           <p className="text-center font-inter text-bunker-success text-sm">
-            ✓ {t('game.vote.voteCounted')}
+            {t('game.vote.voteCounted')}
           </p>
         )}
 
@@ -666,13 +666,27 @@ function GamePage(): JSX.Element {
           <p className="font-inter text-sm text-bunker-muted">
             {t('game.vote.prompt')}
           </p>
+          <div className="flex flex-col gap-1">
+            {players
+              .filter((p) => p.status === 'ACTIVE' || p.status === 'RECONNECTING')
+              .map((p) => {
+                const didVote = votes.some((v) => v.voterId === p.playerId);
+                return (
+                  <div key={p.playerId} className="flex items-center gap-2 font-inter text-xs">
+                    <span className={didVote ? 'text-bunker-success' : 'text-bunker-muted/30'}>
+                      {didVote ? '✓' : '·'}
+                    </span>
+                    <span className={didVote ? 'text-bunker-text' : 'text-bunker-muted/40'}>
+                      {p.nickname}
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
           {hasVoted && (
             <div className="flex items-center gap-3">
               <p className="font-inter text-xs text-bunker-success flex-1">
                 {t('game.vote.voteCounted')}
-                {voteWaitingFor > 0 && (
-                  <span className="text-bunker-muted"> {t('game.vote.waiting', { count: voteWaitingFor })}</span>
-                )}
               </p>
               {!voteChangeUsed && (
                 <button
