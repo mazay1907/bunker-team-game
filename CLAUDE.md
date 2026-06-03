@@ -118,6 +118,12 @@ Vite proxies `/api` and `/socket.io` to port 3000 in dev — no CORS config need
 ### Size limits
 - Functions: max 40 lines. Files: max 250 lines.
 
+### UX conventions
+- **Enter key confirms every primary action.** Any form with a single confirm button must also fire on `Enter`. Implementation pattern:
+  - For `<form>` elements: use `onSubmit` — browser handles Enter automatically.
+  - For standalone buttons tied to state (not a `<form>`): add `document.addEventListener('keydown', onKey)` in a `useEffect` that cleans up on unmount; guard with the same disabled conditions as the button.
+  - Pattern already applied: `HomePage` (form submit), `LobbyPage` nickname entry (`onKeyDown`), `GamePage` reveal confirm (`useEffect`), `LobbyPage` ScenarioPicker confirm (`useEffect`).
+
 ### Commits
 Format: `type(scope): description`
 Scopes: `server` | `client` | `shared` | `content` | `infra`

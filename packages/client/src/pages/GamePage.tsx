@@ -442,6 +442,13 @@ function GamePage(): JSX.Element {
     });
   }, [selectedCats, quota]);
 
+  useEffect(() => {
+    if (phase !== 'REVEAL' || isRevealed) return undefined;
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Enter') handleRevealSubmit(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [phase, isRevealed, handleRevealSubmit]);
+
   const toggleCat = useCallback((cat: TraitCategory): void => {
     setSelectedCats((prev) => {
       if (prev.includes(cat)) return prev.filter((c) => c !== cat);

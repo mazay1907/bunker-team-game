@@ -73,6 +73,14 @@ function ScenarioPicker({ isHost, playerCount, onPick }: ScenarioPickerProps): J
     setIsPicking(false);
   };
 
+  useEffect(() => {
+    if (!selected || isPicking) return undefined;
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Enter') void handleConfirm(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, isPicking]);
+
   if (!isHost) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
