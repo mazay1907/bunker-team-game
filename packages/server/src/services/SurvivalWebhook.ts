@@ -2,7 +2,9 @@ import type { Server } from 'socket.io';
 import { EVENTS } from '@bunker/shared';
 import type { Player, Scenario, SurvivalPredictionPayload } from '@bunker/shared';
 
-const SURVIVAL_WEBHOOK_URL = 'https://primary-production-dd401.up.railway.app/webhook/bunker';
+const SURVIVAL_WEBHOOK_URL =
+  process.env['SURVIVAL_WEBHOOK_URL'] ?? 'https://primary-production-dd401.up.railway.app/webhook/bunker';
+const SURVIVAL_WEBHOOK_SECRET = process.env['SURVIVAL_WEBHOOK_SECRET'] ?? '';
 
 /**
  * Server-side cache: roomId → prediction text.
@@ -41,7 +43,7 @@ export async function callSurvivalWebhook(
 
     const res = await fetch(SURVIVAL_WEBHOOK_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Webhook-Secret': SURVIVAL_WEBHOOK_SECRET },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30_000),
     });
