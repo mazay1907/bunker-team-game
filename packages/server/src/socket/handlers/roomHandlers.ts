@@ -96,10 +96,12 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
             const found = roomManager.findPlayerById(existingPlayerId);
             // Also handle ACTIVE players with no socketId (host connecting after HTTP room creation)
             // Also allow KICKED players to re-enter if they still have their reconnect token
+            // Also allow SPECTATOR players (voted out or auto-eliminated) to reconnect as observers
             const isReturning =
               found &&
               (found.player.status === 'RECONNECTING' ||
                 found.player.status === 'KICKED' ||
+                found.player.status === 'SPECTATOR' ||
                 (found.player.status === 'ACTIVE' && !found.player.socketId));
 
             if (isReturning && found) {
@@ -115,14 +117,14 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
                 // (host re-gains their role — it was never changed since we cancelled in time)
               }
 
-              // Update socket ID and status
+              // Update socket ID and status — preserve SPECTATOR status for eliminated players
               roomStore.updateRoom(room.roomId, (r) => {
                 const updatedPlayer = r.players.get(existingPlayerId);
                 if (!updatedPlayer) return r;
                 r.players.set(existingPlayerId, {
                   ...updatedPlayer,
                   socketId: socket.id,
-                  status: 'ACTIVE',
+                  status: updatedPlayer.status === 'SPECTATOR' ? 'SPECTATOR' : 'ACTIVE',
                   disconnectedAt: null,
                 });
                 r.lastActivityAt = new Date();
@@ -155,12 +157,14 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
                   // Kicked player re-entering — others removed them from their list, re-add via PLAYER_JOINED
                   const playerView = roomManager.toPlayerView(updatedPlayer!, updatedRoom, existingPlayerId);
                   socket.to(room.roomId).emit(EVENTS.PLAYER_JOINED, { player: playerView });
-                } else {
+                } else if (player.status !== 'SPECTATOR') {
+                  // Active/reconnecting player — notify others they're back
                   const reconnectedPayload: PlayerReconnectedPayload = {
                     playerId: existingPlayerId,
                   };
                   socket.to(room.roomId).emit(EVENTS.PLAYER_RECONNECTED, reconnectedPayload);
                 }
+                // SPECTATOR reconnect — no broadcast needed, they're just observing
               }
 
               return ack({
