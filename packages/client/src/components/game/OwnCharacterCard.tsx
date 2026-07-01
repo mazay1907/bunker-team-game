@@ -8,13 +8,13 @@ import { TRAIT_CATEGORIES } from '@bunker/shared';
 import { t } from '../../i18n/t.js';
 
 const TRAIT_EMOJI: Record<TraitCategory, string> = {
-  GENDER_AGE: '👤',
+  GENDER: '👤',
+  AGE: '🎂',
   PROFESSION: '💼',
   HEALTH: '❤️',
   HOBBY: '🎯',
   PHOBIA: '😱',
   BAGGAGE: '🎒',
-  SECRET_FACT: '🔍',
 };
 
 interface OwnCharacterCardProps {

@@ -27,13 +27,13 @@ function loadJson<T>(filePath: string): T {
 }
 
 const TRAIT_FILE_MAP: Record<TraitCategory, string> = {
-  GENDER_AGE: 'gender_age.json',
+  GENDER: 'gender.json',
+  AGE: 'age.json',
   PROFESSION: 'profession.json',
   HEALTH: 'health.json',
   HOBBY: 'hobby.json',
   PHOBIA: 'phobia.json',
   BAGGAGE: 'baggage.json',
-  SECRET_FACT: 'secret_fact.json',
 };
 
 export class ContentData {

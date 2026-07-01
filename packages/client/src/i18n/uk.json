@@ -77,13 +77,13 @@
   "game.card.noneRevealed": "Ще нічого не розкрито",
   "game.players": "ГРАВЦІ",
 
-  "trait.category.GENDER_AGE": "Стать / вік",
+  "trait.category.GENDER": "Стать",
+  "trait.category.AGE": "Вік",
   "trait.category.PROFESSION": "Професія",
   "trait.category.HEALTH": "Здоров'я",
   "trait.category.HOBBY": "Хобі",
   "trait.category.PHOBIA": "Фобія",
   "trait.category.BAGGAGE": "Багаж",
-  "trait.category.SECRET_FACT": "Факт",
 
   "end.title": "Бункер закрито",
   "end.survivors": "У бункері залишились",
