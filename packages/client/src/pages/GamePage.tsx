@@ -30,9 +30,10 @@ import type {
   RoomJoinAck,
   PlayerRenameAck,
 } from '@bunker/shared';
-import { socket, getCookie, setCookie, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY } from '../socket/socket.js';
+import { socket, getCookie, setCookie, setActiveRoomCode, sessionKey, reconnectKey } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { t } from '../i18n/t.js';
+import { composeOutcomeSummary } from '../i18n/outcomeSummary.js';
 import { registerSocketListeners } from '../socket/listeners.js';
 import { ScenarioCard } from '../components/game/ScenarioCard.js';
 import { OwnCharacterCard } from '../components/game/OwnCharacterCard.js';
@@ -209,6 +210,11 @@ function GameOverScreen(): JSX.Element {
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8 flex flex-col gap-8">
 
+        {/* Outcome summary sentence — composed client-side from structured server data */}
+        <p className="font-inter text-sm text-bunker-text/90 leading-relaxed text-center">
+          {composeOutcomeSummary(gameEnded.outcomeSummary)}
+        </p>
+
         {/* Scenario / catastrophe */}
         {scenario && !isEarlyEnd && (
           <div className="bg-bunker-surface border border-bunker-border rounded p-4 flex flex-col gap-2">
@@ -344,11 +350,26 @@ function GamePage(): JSX.Element {
       onRoomClosed: () => navigate('/', { replace: true, state: { message: t('end.thankYou') } }),
     });
 
-    // If room is already in store (normal navigation from LobbyPage) skip reconnect
-    if (store.room) return cleanup;
+    const upperRoomCode = (roomCode ?? '').toUpperCase();
+    // Scope the socket auth handshake to this room BEFORE any cookie read or
+    // connect/emit below — required so a leftover token from a finished game
+    // in a different room never gets sent as if it belonged to this one.
+    setActiveRoomCode(upperRoomCode);
 
-    // Full page reload — room cleared from memory, attempt reconnect using cookies
-    const reconnectToken = getCookie(RECONNECT_TOKEN_KEY);
+    // If the store already holds a room AND it matches this URL's room code,
+    // this is normal in-app navigation from LobbyPage — skip reconnect.
+    // If it holds a DIFFERENT room's state (stale Zustand store left over from
+    // a finished/previous game that was never explicitly reset), treat this as
+    // a fresh mount: clear the stale store and fall through to the normal
+    // join/reconnect path for the new room code.
+    if (store.room) {
+      if (store.room.roomCode === upperRoomCode) return cleanup;
+      store.reset();
+    }
+
+    // Full page reload (or stale-store reset above) — attempt reconnect using
+    // this room's own cookie, never any other room's.
+    const reconnectToken = getCookie(reconnectKey(upperRoomCode));
     if (!reconnectToken) {
       // No cookie — show manual reconnect form instead of redirecting away
       setShowReconnectForm(true);
@@ -370,14 +391,14 @@ function GamePage(): JSX.Element {
       }
       await new Promise<void>((resolve) => {
         const payload: RoomJoinPayload = {
-          roomCode: (roomCode ?? '').toUpperCase(),
+          roomCode: upperRoomCode,
           nickname: '',
-          sessionToken: getCookie(SESSION_TOKEN_KEY),
+          sessionToken: getCookie(sessionKey(upperRoomCode)),
         };
         socket.emit(EVENTS.ROOM_JOIN, payload, (ack: RoomJoinAck) => {
           if (ack.ok) {
             useGameStore.getState().setOwnPlayer(ack.player.playerId, ack.player.nickname);
-            setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+            setCookie(reconnectKey(upperRoomCode), ack.reconnectToken);
             // If room returned to LOBBY state, send player back to the lobby page
             if (ack.room.state === 'LOBBY' || ack.room.state === 'SCENARIO_PICK') {
               navigate(`/r/${roomCode ?? ''}`, { replace: true });
@@ -530,6 +551,9 @@ function GamePage(): JSX.Element {
   const handleManualReconnect = useCallback((): void => {
     if (reconnectName.trim().length < 2) return;
     setReconnectError(null);
+    const upperRoomCode = (roomCode ?? '').toUpperCase();
+    // Scope the auth handshake to this room before connecting/emitting
+    setActiveRoomCode(upperRoomCode);
     const run = async (): Promise<void> => {
       if (!socket.connected) {
         socket.connect();
@@ -540,14 +564,14 @@ function GamePage(): JSX.Element {
         });
       }
       const payload: RoomJoinPayload = {
-        roomCode: (roomCode ?? '').toUpperCase(),
+        roomCode: upperRoomCode,
         nickname: reconnectName.trim(),
         sessionToken: null,
       };
       socket.emit(EVENTS.ROOM_JOIN, payload, (ack: RoomJoinAck) => {
         if (ack.ok) {
           useGameStore.getState().setOwnPlayer(ack.player.playerId, ack.player.nickname);
-          setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+          setCookie(reconnectKey(upperRoomCode), ack.reconnectToken);
           setShowReconnectForm(false);
         } else {
           setReconnectError(t('game.reconnect.errorNotFound'));

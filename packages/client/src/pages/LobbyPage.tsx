@@ -12,7 +12,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Copy, Check, Crown, X, Users, HelpCircle } from 'lucide-react';
-import { socket, RECONNECT_TOKEN_KEY, SESSION_TOKEN_KEY, getCookie, setCookie, claimSession } from '../socket/socket.js';
+import { socket, getCookie, setCookie, claimSession, setActiveRoomCode, sessionKey, reconnectKey } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type {
@@ -191,6 +191,11 @@ function LobbyPage(): JSX.Element {
   const doJoin = useCallback(async (joiningNickname: string): Promise<string | null> => {
     setIsJoining(true);
 
+    const upperRoomCode = (roomCode ?? '').toUpperCase();
+    // Scope the socket auth handshake to this room BEFORE connecting/emitting —
+    // a leftover token cached for a different room must never leak in here.
+    setActiveRoomCode(upperRoomCode);
+
     if (!socket.connected) {
       socket.connect();
       await new Promise<void>((resolve, reject) => {
@@ -200,9 +205,9 @@ function LobbyPage(): JSX.Element {
       });
     }
 
-    const sessionToken = getCookie(SESSION_TOKEN_KEY);
+    const sessionToken = getCookie(sessionKey(upperRoomCode));
     const payload: RoomJoinPayload = {
-      roomCode: (roomCode ?? '').toUpperCase(),
+      roomCode: upperRoomCode,
       nickname: joiningNickname,
       sessionToken,
     };
@@ -211,9 +216,9 @@ function LobbyPage(): JSX.Element {
       socket.emit(EVENTS.ROOM_JOIN, payload, (ack: RoomJoinAck) => {
         if (ack.ok) {
           setOwnPlayer(ack.player.playerId, ack.player.nickname);
-          setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+          setCookie(reconnectKey(upperRoomCode), ack.reconnectToken);
           if (!isFreshJoin.current) {
-            claimSession();
+            claimSession(upperRoomCode);
           }
           resolve(null);
         } else {
@@ -241,7 +246,9 @@ function LobbyPage(): JSX.Element {
     });
 
     const nickname = locationState?.nickname;
-    const reconnectToken = getCookie(RECONNECT_TOKEN_KEY);
+    // Scope active room code before reading the cookie — this room's key only
+    setActiveRoomCode(roomCode.toUpperCase());
+    const reconnectToken = getCookie(reconnectKey(roomCode.toUpperCase()));
 
     // Host navigated here from HomePage — already joined, just watch for events
     const storeState = useGameStore.getState();

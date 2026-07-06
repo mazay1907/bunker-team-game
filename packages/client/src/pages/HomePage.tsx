@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { t } from '../i18n/t.js';
-import { socket, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY, setCookie, claimSession } from '../socket/socket.js';
+import { socket, setCookie, claimSession, setActiveRoomCode, sessionKey, reconnectKey } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type { RoomJoinPayload, RoomJoinAck, CreateRoomResponse } from '@bunker/shared';
@@ -68,8 +68,12 @@ function HomePage(): JSX.Element {
       }
 
       const data = (await response.json()) as CreateRoomResponse;
-      setCookie(SESSION_TOKEN_KEY, data.sessionToken);
-      setCookie(RECONNECT_TOKEN_KEY, data.reconnectToken);
+      // Scope the socket auth handshake to this brand-new room BEFORE storing
+      // any cookies or connecting — prevents a stale token from a previous
+      // room leaking into this room's handshake.
+      setActiveRoomCode(data.roomCode);
+      setCookie(sessionKey(data.roomCode), data.sessionToken);
+      setCookie(reconnectKey(data.roomCode), data.reconnectToken);
       setOwnPlayer(data.playerId, createNickname.trim());
       socket.connect();
 
@@ -79,8 +83,8 @@ function HomePage(): JSX.Element {
         socket.once('connect', () => { clearTimeout(timeout); resolve(); });
         socket.once('connect_error', (err) => { clearTimeout(timeout); reject(err); });
       });
-      // Tell other tabs that this tab has claimed the session
-      claimSession();
+      // Tell other tabs that this tab has claimed the session for this room
+      claimSession(data.roomCode);
 
       const joinPayload: RoomJoinPayload = {
         roomCode: data.roomCode,
@@ -93,7 +97,7 @@ function HomePage(): JSX.Element {
           if (ack.ok) {
             setRoom(ack.room);
             setPlayers([ack.player]);
-            setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+            setCookie(reconnectKey(data.roomCode), ack.reconnectToken);
             resolve();
           } else {
             reject(new Error(ack.error));

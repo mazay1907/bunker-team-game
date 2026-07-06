@@ -9,20 +9,18 @@
  * - Single-elimination rule for simultaneous disconnects (9.2.2)
  */
 
-import type { Server, Socket } from 'socket.io';
+import type { Server } from 'socket.io';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { randomBytes } from 'crypto';
 import {
   EVENTS,
-  MIN_PLAYERS,
   MAX_PLAYERS,
   RECONNECT_HOLD_SECONDS,
   HOST_TRANSFER_SECONDS,
 } from '@bunker/shared';
 import type {
   Player,
-  RoomJoinPayload,
   RoomJoinAck,
   PlayerJoinedPayload,
   PlayerLeftPayload,
@@ -44,6 +42,7 @@ import type { GameStateMachine } from '../../services/GameStateMachine.js';
 import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 import { emitAnalytics } from '../../services/Analytics.js';
 import { getCachedPrediction } from '../../services/SurvivalWebhook.js';
+import type { AppSocket } from '../middleware.js';
 
 // Zod schema for room:join payload validation
 // nickname min(2) is NOT enforced here — reconnect sends empty string and is valid.
@@ -69,7 +68,7 @@ interface HandlerDeps {
   gsm: GameStateMachine;
 }
 
-export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
+export function registerRoomHandlers(socket: AppSocket, deps: HandlerDeps): void {
   const { io, roomStore, sessionStore, reconnectStore, roomManager, contentData, timerService, gsm } = deps;
 
   // ── room:join ────────────────────────────────────────────────────────────────
@@ -82,7 +81,7 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
           return ack({ ok: false, error: 'INVALID_NICKNAME' });
         }
 
-        const { roomCode, nickname, sessionToken } = parsed.data;
+        const { roomCode, nickname } = parsed.data;
 
         // ── Reconnect path ─────────────────────────────────────────────────────
         // Check reconnect token first (more secure — requires both tokens)
@@ -94,11 +93,18 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
           const existingPlayerId = reconnectStore.get(reconnectToken);
           if (existingPlayerId) {
             const found = roomManager.findPlayerById(existingPlayerId);
+            // Defense in depth (BUGFIX_SESSION_ROOM_SCOPING, Section 2E): a reconnect
+            // token that resolves to a player in a DIFFERENT room than the one the
+            // client requested must be treated exactly as if it were absent — never
+            // reconnect the client into a room it did not ask for. Falls through to
+            // the first-time-join path below, same ack shape as no token at all.
+            const roomMatches = found ? found.room.roomCode === roomCode : false;
             // Also handle ACTIVE players with no socketId (host connecting after HTTP room creation)
             // Also allow KICKED players to re-enter if they still have their reconnect token
             // Also allow SPECTATOR players (voted out or auto-eliminated) to reconnect as observers
             const isReturning =
               found &&
+              roomMatches &&
               (found.player.status === 'RECONNECTING' ||
                 found.player.status === 'KICKED' ||
                 found.player.status === 'SPECTATOR' ||
@@ -320,7 +326,7 @@ export function registerRoomHandlers(socket: Socket, deps: HandlerDeps): void {
   socket.on(
     EVENTS.PLAYER_RENAME,
     (payload: unknown, ack: (res: PlayerRenameAck) => void) => {
-      const playerId = socket.data.playerId as string | undefined;
+      const playerId = socket.data.playerId;
       if (!playerId) return ack({ ok: false, error: 'INVALID_NICKNAME' });
 
       const parsed = renameSchema.safeParse(payload);

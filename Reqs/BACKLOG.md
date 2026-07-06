@@ -10,6 +10,12 @@
 
 ---
 
+## Bug Fixes (Confirmed, Priority over new features)
+
+- [x] **BUG-1** Fix session/reconnect data leaking across room codes (stale Zustand store + unscoped cookies on client, missing roomCode match check on server reconnect path). Full spec: `Reqs/BUGFIX_SESSION_ROOM_SCOPING.md`. Spans client (`socket.ts`, `HomePage.tsx`, `LobbyPage.tsx`, `GamePage.tsx`) and server (`roomHandlers.ts`). Developer-verified (typecheck/lint-on-changed-files/test/build green); pending Solution Architect review.
+
+---
+
 ## High Priority — MVP Foundations
 
 These tasks define the core architecture and the playable shell. They block everything else.
@@ -22,9 +28,9 @@ These tasks define the core architecture and the playable shell. They block ever
 - [ ] **HP-6** Build home page: "Створити кімнату" + "Приєднатися за кодом" actions (Ukrainian UI)
 - [ ] **HP-7** Build room creation flow (Scenario A): generate 6-char room code, create room state, redirect host to lobby
 - [ ] **HP-8** Build join flow via invite link (Scenario B): nickname entry, validation, join lobby
-- [ ] **HP-9** Build lobby UI: room code display, copy invite link button, real-time player list, host badge, "Почати гру" button (disabled until 6+ players)
-- [ ] **HP-10** Implement player count enforcement (6 min, 10 max) — disable Start button outside that range with tooltip
-- [ ] **HP-11** Author Ukrainian content for character traits — ~30 entries per category × 7 categories (Стать/вік, Професія, Здоров'я, Хобі, Фобія, Багаж, Факт). Store as structured JSON / YAML
+- [ ] **HP-9** Build lobby UI: room code display, copy invite link button, real-time player list, host badge, "Почати гру" button (disabled until 5+ players)
+- [ ] **HP-10** Implement player count enforcement (5 min, 10 max) — disable Start button outside that range with tooltip
+- [ ] **HP-11** Author Ukrainian content for character traits — 50 entries per category × 7 categories (Стать, Вік, Професія, Здоров'я, Хобі, Фобія, Багаж). Store as structured JSON / YAML
 - [ ] **HP-12** Author 3-5 Ukrainian apocalypse scenarios with title, description, bunker conditions
 - [ ] **HP-13** Implement scenario picker modal at game start (random or pick)
 - [ ] **HP-14** Implement character dealing: random unique character per player, no duplicates within session
