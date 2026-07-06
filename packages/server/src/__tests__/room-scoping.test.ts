@@ -87,6 +87,16 @@ describe('room:join — cross-room reconnect token rejection (Scenario E)', () =
     expect(hostXAck.ok).toBe(true);
     const roomXReconnectToken = hostXAck.ok ? hostXAck.reconnectToken : '';
     hostX.disconnect();
+    // The server processes the disconnect asynchronously over the wire — give
+    // it a tick to run handleLobbyDisconnect before snapshotting room X's size.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // hostX was room X's sole player, so their own disconnect in LOBBY removes
+    // their row immediately (handleLobbyDisconnect) — this happens regardless
+    // of anything the second client below does. Snapshot the post-disconnect
+    // size here so we can assert room X is untouched BY THE SECOND CLIENT,
+    // independent of hostX's own unrelated disconnect cleanup.
+    const roomXSizeAfterHostDisconnect = roomStore.getRoomByCode(roomXCode)?.players.size;
 
     // Room Y — a brand-new, unrelated room
     const { roomCode: roomYCode } = roomManager.createRoom('HostY');
@@ -111,9 +121,11 @@ describe('room:join — cross-room reconnect token rejection (Scenario E)', () =
       expect(ack.reconnectToken).not.toBe(roomXReconnectToken);
     }
 
-    // Room X must be untouched — still just its original host.
+    // Room X must be untouched by the second client's join attempt — no new
+    // row added, no change to its player count from what it was right after
+    // hostX's own (unrelated) disconnect.
     const roomXAfter = roomStore.getRoomByCode(roomXCode);
-    expect(roomXAfter?.players.size).toBe(1);
+    expect(roomXAfter?.players.size).toBe(roomXSizeAfterHostDisconnect);
 
     client.disconnect();
   });

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { t } from '../i18n/t.js';
-import { socket, setCookie, claimSession, setActiveRoomCode, sessionKey, reconnectKey } from '../socket/socket.js';
+import { socket, setCookie, claimSession, ensureConnectedForRoom, sessionKey, reconnectKey } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type { RoomJoinPayload, RoomJoinAck, CreateRoomResponse } from '@bunker/shared';
@@ -68,21 +68,14 @@ function HomePage(): JSX.Element {
       }
 
       const data = (await response.json()) as CreateRoomResponse;
-      // Scope the socket auth handshake to this brand-new room BEFORE storing
-      // any cookies or connecting — prevents a stale token from a previous
-      // room leaking into this room's handshake.
-      setActiveRoomCode(data.roomCode);
       setCookie(sessionKey(data.roomCode), data.sessionToken);
       setCookie(reconnectKey(data.roomCode), data.reconnectToken);
       setOwnPlayer(data.playerId, createNickname.trim());
-      socket.connect();
-
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('connect timeout')), 5000);
-        if (socket.connected) { clearTimeout(timeout); resolve(); return; }
-        socket.once('connect', () => { clearTimeout(timeout); resolve(); });
-        socket.once('connect_error', (err) => { clearTimeout(timeout); reject(err); });
-      });
+      // Ensures a fresh handshake for this brand-new room — forces a
+      // disconnect/reconnect cycle if the socket is still connected to a
+      // stale room from a previously finished game in this same tab
+      // (BUGFIX_HOST_DUPLICATE_JOIN, prevents the phantom-host-row bug).
+      await ensureConnectedForRoom(data.roomCode);
       // Tell other tabs that this tab has claimed the session for this room
       claimSession(data.roomCode);
 

@@ -12,7 +12,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Copy, Check, Crown, X, Users, HelpCircle } from 'lucide-react';
-import { socket, getCookie, setCookie, claimSession, setActiveRoomCode, sessionKey, reconnectKey } from '../socket/socket.js';
+import { socket, getCookie, setCookie, claimSession, ensureConnectedForRoom, setActiveRoomCode, sessionKey, reconnectKey } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type {
@@ -192,18 +192,11 @@ function LobbyPage(): JSX.Element {
     setIsJoining(true);
 
     const upperRoomCode = (roomCode ?? '').toUpperCase();
-    // Scope the socket auth handshake to this room BEFORE connecting/emitting —
-    // a leftover token cached for a different room must never leak in here.
-    setActiveRoomCode(upperRoomCode);
-
-    if (!socket.connected) {
-      socket.connect();
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('connect timeout')), 5000);
-        socket.once('connect', () => { clearTimeout(timeout); resolve(); });
-        socket.once('connect_error', (err) => { clearTimeout(timeout); reject(err); });
-      });
-    }
+    // Ensures a fresh handshake for this room — forces a disconnect/reconnect
+    // cycle if the socket is still connected to a stale room (e.g. a fresh
+    // invite link opened in a tab left connected from a finished/left game;
+    // BUGFIX_HOST_DUPLICATE_JOIN Scenario C).
+    await ensureConnectedForRoom(upperRoomCode);
 
     const sessionToken = getCookie(sessionKey(upperRoomCode));
     const payload: RoomJoinPayload = {

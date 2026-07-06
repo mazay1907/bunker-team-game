@@ -13,6 +13,7 @@
 ## Bug Fixes (Confirmed, Priority over new features)
 
 - [x] **BUG-1** Fix session/reconnect data leaking across room codes (stale Zustand store + unscoped cookies on client, missing roomCode match check on server reconnect path). Full spec: `Reqs/BUGFIX_SESSION_ROOM_SCOPING.md`. Spans client (`socket.ts`, `HomePage.tsx`, `LobbyPage.tsx`, `GamePage.tsx`) and server (`roomHandlers.ts`). Developer-verified (typecheck/lint-on-changed-files/test/build green); pending Solution Architect review.
+- [x] **BUG-2** Fix phantom duplicate player when host finishes a game and immediately creates a new game in the same tab (regression of BUG-1: BUG-1's reconnect room-code-match check correctly rejects the stale token, but the first-time-join path it falls through to has no guard against the HTTP-pre-inserted, un-socketed host row already present in `room.players`, so `uniqueNickname()` mints a duplicate `"<nickname> (2)"` row). Full spec: `Reqs/BUGFIX_HOST_DUPLICATE_JOIN.md`. Requires both a client-side connection-hygiene fix (`HomePage.tsx`, `LobbyPage.tsx`, likely `socket.ts`) and a server-side defense-in-depth check in the first-time-join path (`roomHandlers.ts`) that attaches an incoming socket to an existing un-socketed same-session row instead of creating a new one. Must not reopen BUG-1's regressions. Developer-verified (typecheck/lint/test/build green, `ensureConnectedForRoom()` + server sessionToken-attach tests added); pending Solution Architect review.
 
 ---
 

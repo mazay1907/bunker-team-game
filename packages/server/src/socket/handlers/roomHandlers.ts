@@ -244,6 +244,58 @@ export function registerRoomHandlers(socket: AppSocket, deps: HandlerDeps): void
           return ack({ ok: false, error: 'INVALID_NICKNAME' });
         }
 
+        // ── Defense in depth (BUGFIX_HOST_DUPLICATE_JOIN, Scenario D) ──────────
+        // An HTTP room-creation call (POST /api/rooms) pre-inserts the host as an
+        // ACTIVE player row with socketId: null, before any socket ever connects.
+        // If a client-side connection-hygiene bug (or a hand-crafted ROOM_JOIN)
+        // reuses this exact sessionToken as a genuine first-time join for the
+        // SAME room, attach the incoming socket to that existing orphaned row
+        // instead of minting a new one via uniqueNickname() — this is the
+        // server-authoritative guarantee against duplicate player rows for the
+        // same session, independent of client correctness. Scoped tightly to
+        // (same room + same sessionToken + socketId === null + ACTIVE) so it
+        // never intercepts genuine nickname collisions between different humans.
+        const { sessionToken: incomingSessionToken } = parsed.data;
+        const orphanedOwnRow = incomingSessionToken
+          ? [...room.players.values()].find(
+              (p) =>
+                p.sessionToken === incomingSessionToken &&
+                p.socketId === null &&
+                p.status === 'ACTIVE',
+            )
+          : undefined;
+
+        if (orphanedOwnRow) {
+          roomStore.updateRoom(room.roomId, (r) => {
+            const p = r.players.get(orphanedOwnRow.playerId);
+            if (p) r.players.set(orphanedOwnRow.playerId, { ...p, socketId: socket.id, disconnectedAt: null });
+            r.lastActivityAt = new Date();
+            return r;
+          });
+          socket.data.playerId = orphanedOwnRow.playerId;
+          sessionStore.set(orphanedOwnRow.sessionToken, orphanedOwnRow.playerId);
+          await socket.join(room.roomId);
+
+          const attachedRoom = roomStore.getRoom(room.roomId)!;
+          const attachedPlayer = attachedRoom.players.get(orphanedOwnRow.playerId)!;
+          const statePayload: RoomStatePayload = {
+            room: roomManager.toRoomView(attachedRoom, contentData),
+            players: roomManager.getPlayerViews(attachedRoom, orphanedOwnRow.playerId),
+            ownCharacter: attachedPlayer.character ?? null,
+            game: null,
+          };
+          socket.emit(EVENTS.ROOM_STATE, statePayload);
+
+          console.log(`[room:join] attached socket to orphaned row "${attachedPlayer.nickname}" in ${room.roomCode}`);
+
+          return ack({
+            ok: true,
+            player: roomManager.toPlayerView(attachedPlayer, attachedRoom, orphanedOwnRow.playerId),
+            room: roomManager.toRoomView(attachedRoom, contentData),
+            reconnectToken: attachedPlayer.reconnectToken,
+          });
+        }
+
         // Handle nickname collision
         const existingNicknames = new Set(
           Array.from(room.players.values()).map((p) => p.nickname),

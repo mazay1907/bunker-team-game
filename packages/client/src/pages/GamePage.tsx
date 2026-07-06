@@ -30,7 +30,7 @@ import type {
   RoomJoinAck,
   PlayerRenameAck,
 } from '@bunker/shared';
-import { socket, getCookie, setCookie, setActiveRoomCode, sessionKey, reconnectKey } from '../socket/socket.js';
+import { socket, getCookie, setCookie, ensureConnectedForRoom, sessionKey, reconnectKey } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { t } from '../i18n/t.js';
 import { composeOutcomeSummary } from '../i18n/outcomeSummary.js';
@@ -351,10 +351,6 @@ function GamePage(): JSX.Element {
     });
 
     const upperRoomCode = (roomCode ?? '').toUpperCase();
-    // Scope the socket auth handshake to this room BEFORE any cookie read or
-    // connect/emit below — required so a leftover token from a finished game
-    // in a different room never gets sent as if it belonged to this one.
-    setActiveRoomCode(upperRoomCode);
 
     // If the store already holds a room AND it matches this URL's room code,
     // this is normal in-app navigation from LobbyPage — skip reconnect.
@@ -381,14 +377,11 @@ function GamePage(): JSX.Element {
     joinCalledRef.current = true;
 
     const run = async (): Promise<void> => {
-      if (!socket.connected) {
-        socket.connect();
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error('connect timeout')), 5000);
-          socket.once('connect', () => { clearTimeout(timer); resolve(); });
-          socket.once('connect_error', (err) => { clearTimeout(timer); reject(err); });
-        });
-      }
+      // Forces a fresh handshake if the socket is still connected to a stale
+      // room (e.g. host finished a previous game without a page reload) —
+      // BUGFIX_HOST_DUPLICATE_JOIN. On a genuine full page reload the socket
+      // has already dropped, so this resolves via the plain fresh-connect path.
+      await ensureConnectedForRoom(upperRoomCode);
       await new Promise<void>((resolve) => {
         const payload: RoomJoinPayload = {
           roomCode: upperRoomCode,
@@ -552,17 +545,10 @@ function GamePage(): JSX.Element {
     if (reconnectName.trim().length < 2) return;
     setReconnectError(null);
     const upperRoomCode = (roomCode ?? '').toUpperCase();
-    // Scope the auth handshake to this room before connecting/emitting
-    setActiveRoomCode(upperRoomCode);
     const run = async (): Promise<void> => {
-      if (!socket.connected) {
-        socket.connect();
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error('timeout')), 5000);
-          socket.once('connect', () => { clearTimeout(timer); resolve(); });
-          socket.once('connect_error', (err) => { clearTimeout(timer); reject(err); });
-        });
-      }
+      // Forces a fresh handshake if the socket is still connected to a stale
+      // room (BUGFIX_HOST_DUPLICATE_JOIN) — replaces the ad-hoc connect guard.
+      await ensureConnectedForRoom(upperRoomCode);
       const payload: RoomJoinPayload = {
         roomCode: upperRoomCode,
         nickname: reconnectName.trim(),
