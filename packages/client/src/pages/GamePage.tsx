@@ -33,7 +33,6 @@ import type {
 import { socket, getCookie, setCookie, ensureConnectedForRoom, sessionKey, reconnectKey } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { t } from '../i18n/t.js';
-import { composeOutcomeSummary } from '../i18n/outcomeSummary.js';
 import { registerSocketListeners } from '../socket/listeners.js';
 import { ScenarioCard } from '../components/game/ScenarioCard.js';
 import { OwnCharacterCard } from '../components/game/OwnCharacterCard.js';
@@ -210,9 +209,9 @@ function GameOverScreen(): JSX.Element {
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8 flex flex-col gap-8">
 
-        {/* Outcome summary sentence — composed client-side from structured server data */}
+        {/* Outcome summary sentence — server-composed Ukrainian template text */}
         <p className="font-inter text-sm text-bunker-text/90 leading-relaxed text-center">
-          {composeOutcomeSummary(gameEnded.outcomeSummary)}
+          {gameEnded.outcomeSummary}
         </p>
 
         {/* Scenario / catastrophe */}

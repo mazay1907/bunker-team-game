@@ -17,7 +17,6 @@ import type {
   GameView,
   Scenario,
   VoteRecord,
-  OutcomeSummaryData,
 } from '@bunker/shared';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -77,7 +76,7 @@ interface GameState {
     reason: 'COMPLETED' | 'HOST_ENDED_EARLY';
     survivors: PlayerView[];
     eliminated: PlayerView[];
-    outcomeSummary: OutcomeSummaryData;
+    outcomeSummary: string;
   } | null;
 
   // AI survival prediction (arrives async after game:ended)

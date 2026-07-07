@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useGameStore } from './gameStore.js';
-import type { RoomView, PlayerView, CharacterCard, OutcomeSummaryData } from '@bunker/shared';
+import type { RoomView, PlayerView, CharacterCard } from '@bunker/shared';
 
 function makeRoom(roomCode: string): RoomView {
   return {
@@ -45,7 +45,7 @@ describe('useGameStore.enterRoom', () => {
       reason: 'COMPLETED',
       survivors: [],
       eliminated: [],
-      outcomeSummary: {} as OutcomeSummaryData,
+      outcomeSummary: '',
     });
 
     const isNewRoom = useGameStore.getState().enterRoom('ABCDEF');
@@ -70,7 +70,7 @@ describe('useGameStore.enterRoom', () => {
       reason: 'COMPLETED',
       survivors: [makePlayer('p1')],
       eliminated: [makePlayer('p2')],
-      outcomeSummary: {} as OutcomeSummaryData,
+      outcomeSummary: '',
     });
     useGameStore.getState().addVote({ voterId: 'p1', targetId: 'p2' } as never);
     useGameStore.getState().setVoteTally({ p2: 1 });
@@ -113,7 +113,7 @@ describe('useGameStore.enterRoom', () => {
       reason: 'COMPLETED',
       survivors: [makePlayer('p1')],
       eliminated: [],
-      outcomeSummary: {} as OutcomeSummaryData,
+      outcomeSummary: '',
     });
     useGameStore.getState().setOwnCharacter({ traits: {} } as unknown as CharacterCard);
 
