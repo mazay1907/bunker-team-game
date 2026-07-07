@@ -344,7 +344,6 @@ function GamePage(): JSX.Element {
   const joinCalledRef = useRef(false);
 
   useEffect(() => {
-    const store = useGameStore.getState();
     const cleanup = registerSocketListeners({
       onKicked: () => navigate('/', { replace: true }),
       onRoomClosed: () => navigate('/', { replace: true, state: { message: t('end.thankYou') } }),
@@ -352,16 +351,15 @@ function GamePage(): JSX.Element {
 
     const upperRoomCode = (roomCode ?? '').toUpperCase();
 
-    // If the store already holds a room AND it matches this URL's room code,
-    // this is normal in-app navigation from LobbyPage — skip reconnect.
-    // If it holds a DIFFERENT room's state (stale Zustand store left over from
-    // a finished/previous game that was never explicitly reset), treat this as
-    // a fresh mount: clear the stale store and fall through to the normal
-    // join/reconnect path for the new room code.
-    if (store.room) {
-      if (store.room.roomCode === upperRoomCode) return cleanup;
-      store.reset();
-    }
+    // enterRoom() is the single implementation of the "reset on new room,
+    // preserve on same room" decision (BUGFIX_STALE_STORE_ON_NEW_GAME):
+    // - same room already active (normal in-app nav from LobbyPage) → false, skip.
+    // - different room held (stale store from a previous finished game) → full
+    //   reset, then fall through to the reconnect/join logic below.
+    // - no room held at all (full page reload) → nothing to reset, fall through
+    //   directly to the reconnect-token lookup (S5-1 reconnect flow untouched).
+    const isNewRoom = useGameStore.getState().enterRoom(upperRoomCode);
+    if (!isNewRoom) return cleanup;
 
     // Full page reload (or stale-store reset above) — attempt reconnect using
     // this room's own cookie, never any other room's.

@@ -17,6 +17,7 @@ import type {
   GameView,
   Scenario,
   VoteRecord,
+  OutcomeSummaryData,
 } from '@bunker/shared';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -76,7 +77,7 @@ interface GameState {
     reason: 'COMPLETED' | 'HOST_ENDED_EARLY';
     survivors: PlayerView[];
     eliminated: PlayerView[];
-    outcomeSummary: string;
+    outcomeSummary: OutcomeSummaryData;
   } | null;
 
   // AI survival prediction (arrives async after game:ended)
@@ -109,6 +110,19 @@ interface GameState {
   setSurvivalPrediction: (prediction: string | null) => void;
   reset: () => void;
   resetRound: () => void;
+  /**
+   * Called on every room-entry point (create room, join room, GamePage mount).
+   * Compares the incoming roomCode against the currently-held room (if any):
+   * - Different room held → full reset (clears prior game's stale state), returns true.
+   * - No room held (null, e.g. fresh page load) → nothing to reset, returns true.
+   * - Same room held → no-op, returns false.
+   *
+   * Return value contract: true = "a different/no room context — caller should
+   * proceed with join/reconnect init"; false = "same room already active — caller
+   * should bail/skip re-init." This is NOT "was a reset performed" (it's true even
+   * in the null-room branch where nothing was reset) — never name it `wasReset`.
+   */
+  enterRoom: (roomCode: string) => boolean;
 }
 
 const initialState = {
@@ -136,7 +150,7 @@ const initialState = {
   survivalPrediction: null,
 };
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   ...initialState,
 
   setConnectionState: (connectionState) => set({ connectionState }),
@@ -222,4 +236,14 @@ export const useGameStore = create<GameState>((set) => ({
     }),
 
   reset: () => set(initialState),
+
+  enterRoom: (roomCode) => {
+    const current = get().room?.roomCode;
+    const upper = roomCode.toUpperCase();
+    if (current && current.toUpperCase() === upper) {
+      return false; // same room already active — no state change
+    }
+    set(initialState);
+    return true; // a different room is now active (or none was) — proceed with join/reconnect
+  },
 }));

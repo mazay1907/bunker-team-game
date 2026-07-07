@@ -8,6 +8,7 @@
 
 import { socket } from './socket.js';
 import { useGameStore } from '../store/gameStore.js';
+import { playTimerEndSound } from '../sound/timerEndSound.js';
 import { EVENTS } from '@bunker/shared';
 import type {
   RoomStatePayload,
@@ -46,6 +47,12 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
 
   // ── room:state — full re-sync on join or reconnect ────────────────────────
   const onRoomState = (payload: RoomStatePayload): void => {
+    // Defense-in-depth (BUGFIX_STALE_STORE_ON_NEW_GAME, optional hardening):
+    // the call-site enterRoom() placements are sufficient on their own, but
+    // guard here too in case a future room:state delivery races ahead of them.
+    if (store.room && store.room.roomCode !== payload.room.roomCode) {
+      store.reset();
+    }
     store.setRoom(payload.room);
     store.setPlayers(payload.players);
     store.setOwnCharacter(payload.ownCharacter);
@@ -242,6 +249,8 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
   // ── timer:ended — debate timer hit zero ───────────────────────────────────
   const onTimerEnded = (): void => {
     store.setDebateTimerEnded(true);
+    // Audible cue so every player notices, not just whoever is looking at the screen.
+    playTimerEndSound();
   };
 
   // ── debate:order — speaking order for this debate round ───────────────────

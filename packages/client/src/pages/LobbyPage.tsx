@@ -232,6 +232,14 @@ function LobbyPage(): JSX.Element {
   useEffect(() => {
     if (!roomCode) { navigate('/'); return; }
 
+    // Clear any stale state left over from a previously finished game in this
+    // same tab before any other store write, listener registration, or
+    // conditional early-return below (BUGFIX_STALE_STORE_ON_NEW_GAME). The
+    // return value is intentionally ignored here — the already-joined check
+    // below (storeState.ownPlayerId && storeState.room) serves this effect's
+    // own same-room-skip purpose independently.
+    useGameStore.getState().enterRoom(roomCode.toUpperCase());
+
     const cleanup = registerSocketListeners({
       onKicked: () => {
         navigate('/', { replace: true });

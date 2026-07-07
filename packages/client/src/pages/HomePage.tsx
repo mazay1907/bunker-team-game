@@ -70,6 +70,9 @@ function HomePage(): JSX.Element {
       const data = (await response.json()) as CreateRoomResponse;
       setCookie(sessionKey(data.roomCode), data.sessionToken);
       setCookie(reconnectKey(data.roomCode), data.reconnectToken);
+      // Clear any stale state left over from a previously finished game in this
+      // same tab before writing the new room's data (BUGFIX_STALE_STORE_ON_NEW_GAME).
+      useGameStore.getState().enterRoom(data.roomCode);
       setOwnPlayer(data.playerId, createNickname.trim());
       // Ensures a fresh handshake for this brand-new room — forces a
       // disconnect/reconnect cycle if the socket is still connected to a
@@ -121,6 +124,9 @@ function HomePage(): JSX.Element {
     setJoinError(null);
     setIsJoining(true);
     try {
+      // Clear any stale state left over from a previously finished game in this
+      // same tab before writing the joined room's data (BUGFIX_STALE_STORE_ON_NEW_GAME).
+      useGameStore.getState().enterRoom(codeUpper);
       setOwnPlayer('', joinNickname.trim());
       navigate(`/r/${codeUpper}`, { state: { nickname: joinNickname.trim() } });
     } catch {
