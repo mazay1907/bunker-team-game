@@ -170,7 +170,7 @@ Show the selected scenario's title, description, and bunker conditions in a pers
 ### 5.1 Character Content
 
 #### 5.1.1 Author Ukrainian character trait pool
-Write ~30 distinct values per trait category × 7 categories (Стать/вік, Професія, Здоров'я, Хобі, Фобія, Багаж, Факт); all content in Ukrainian; stored in a structured data file separate from code.
+Write 50 distinct values per trait category × 7 categories (Стать, Вік, Професія, Здоров'я, Хобі, Фобія, Багаж); all content in Ukrainian; stored in a structured data file separate from code.
 **Priority:** P0
 
 #### 5.1.2 Structure character card data model

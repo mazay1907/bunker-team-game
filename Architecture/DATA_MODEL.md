@@ -104,13 +104,13 @@ interface TraitSlot {
 }
 
 type TraitCategory =
-  | "GENDER_AGE"      // Стать / вік
+  | "GENDER"          // Стать
+  | "AGE"             // Вік
   | "PROFESSION"      // Професія
   | "HEALTH"          // Здоров'я
   | "HOBBY"           // Хобі
   | "PHOBIA"          // Фобія
-  | "BAGGAGE"         // Багаж
-  | "SECRET_FACT";    // Факт
+  | "BAGGAGE";        // Багаж
 
 interface CharacterCard {
   playerId: string;

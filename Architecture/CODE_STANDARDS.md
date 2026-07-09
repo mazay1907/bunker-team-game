@@ -94,13 +94,13 @@ bunker-team-game/
 │   ├── scenarios/
 │   │   └── scenarios.json
 │   └── traits/
-│       ├── gender_age.json
+│       ├── gender.json
+│       ├── age.json
 │       ├── profession.json
 │       ├── health.json
 │       ├── hobby.json
 │       ├── phobia.json
-│       ├── baggage.json
-│       └── secret_fact.json
+│       └── baggage.json
 │
 ├── Architecture/                  # Solution Architect documents
 ├── Reqs/                          # Product Manager documents
@@ -122,7 +122,7 @@ bunker-team-game/
 - React components: `PascalCase.tsx` (e.g., `PlayerList.tsx`)
 - Non-component TypeScript: `camelCase.ts` (e.g., `gameStore.ts`, `RoomManager.ts`)
 - Services use PascalCase to reflect they are class-like modules (e.g., `VoteEngine.ts`)
-- JSON content files: `snake_case.json` (e.g., `secret_fact.json`)
+- JSON content files: `snake_case.json` (e.g., `baggage.json`)
 
 ### Variables and Functions
 - Variables and function parameters: `camelCase`

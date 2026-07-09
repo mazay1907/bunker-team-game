@@ -50,13 +50,13 @@ Epics are grouped by phase. **MVP epics are required for Phase 1 release.** Phas
 
 **Features:**
 - Each player is dealt a random character with 7 trait categories:
-  1. **Стать / вік** (Sex / age)
-  2. **Професія** (Profession)
-  3. **Здоров'я** (Health condition)
-  4. **Хобі** (Hobby)
-  5. **Фобія** (Phobia)
-  6. **Багаж** (Baggage / item brought to the bunker)
-  7. **Факт** (Secret fact)
+  1. **Стать** (Gender)
+  2. **Вік** (Age)
+  3. **Професія** (Profession)
+  4. **Здоров'я** (Health condition)
+  5. **Хобі** (Hobby)
+  6. **Фобія** (Phobia)
+  7. **Багаж** (Baggage / item brought to the bunker)
 - Trait pool of ~30 options per category, all written in Ukrainian
 - Random draw guarantees no two players get identical characters in one session
 - Player sees their own card in full at all times; sees what others have **revealed** only

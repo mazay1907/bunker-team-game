@@ -45,8 +45,8 @@ bunker-team-game/
 │       └── hooks/           # useRoom.ts, useGame.ts
 ├── content/
 │   ├── scenarios/scenarios.json
-│   └── traits/             # gender_age.json, profession.json, health.json,
-│                           # hobby.json, phobia.json, baggage.json, secret_fact.json
+│   └── traits/             # gender.json, age.json, profession.json, health.json,
+│                           # hobby.json, phobia.json, baggage.json
 ├── Architecture/           # SA documents (TECH_STACK, SYSTEM_DESIGN, DATA_MODEL,
 │                           # API_DESIGN, CODE_STANDARDS, DEPLOYMENT)
 ├── Reqs/                   # PM documents (PRODUCT_VISION, EPICS, SCENARIOS,
@@ -138,6 +138,7 @@ Example: `feat(server): implement VoteEngine with tie resolution`
 | `product-manager` | Plan features, update backlog, write requirements | "Product!" / "PM, ..." |
 | `solution-architect` | Architecture decisions, code review, tech stack questions | "Start project!" / post-feature review |
 | `developer` | Implement features from backlog | "Developer, start implementation" |
+| `qa-engineer` | Test the app — run/write Vitest + Playwright tests, file bugs, sign off | "QA, test the app" / Developer handoff |
 | `scenario-formatter-sub` | Reformat features into A-Z scenarios for `Reqs/SCENARIOS.md` | Called by PM |
 | `market-research-sub` | Market size, trends, pricing benchmarks | Called by PM (parallel with competitor-analysis-sub) |
 | `competitor-analysis-sub` | Competitor profiles, feature gaps, positioning | Called by PM (parallel with market-research-sub) |
