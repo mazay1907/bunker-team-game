@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createServer } from 'http';
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, type DefaultEventsMap } from 'socket.io';
 import { io as ioClient, Socket } from 'socket.io-client';
 import { EVENTS } from '@bunker/shared';
 import type { RoomJoinPayload, RoomJoinAck } from '@bunker/shared';
@@ -15,10 +15,10 @@ import { InMemoryReconnectStore } from '../store/ReconnectStore.js';
 import { RoomManager } from '../services/RoomManager.js';
 import { GameStateMachine } from '../services/GameStateMachine.js';
 import { TimerService } from '../services/TimerService.js';
-import { createSocketMiddleware } from '../socket/middleware.js';
+import { createSocketMiddleware, type SocketData } from '../socket/middleware.js';
 import { registerRoomHandlers } from '../socket/handlers/roomHandlers.js';
 
-let io: SocketIOServer;
+let io: SocketIOServer<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
 let serverPort: number;
 let roomStore: InMemoryRoomStore;
 let sessionStore: InMemorySessionStore;
@@ -32,7 +32,7 @@ beforeEach(async () => {
   roomManager = new RoomManager(roomStore, sessionStore, reconnectStore);
 
   const httpServer = createServer();
-  io = new SocketIOServer(httpServer, { cors: { origin: '*' } });
+  io = new SocketIOServer<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>(httpServer, { cors: { origin: '*' } });
   io.use(createSocketMiddleware(sessionStore));
 
   const gsm = new GameStateMachine(roomStore, io);
@@ -52,7 +52,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  io.close();
+  void io.close();
 });
 
 function connectClient(auth?: Record<string, string | null>): Socket {

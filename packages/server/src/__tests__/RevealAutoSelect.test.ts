@@ -76,7 +76,7 @@ describe('pickRandomUnrevealed', () => {
 
   it('returns fewer than `count` when not enough unrevealed remain', () => {
     // Reveal 6 out of 7, only 1 unrevealed — ask for 2
-    const sixRevealed = TRAIT_CATEGORIES.slice(0, 6) as TraitCategory[];
+    const sixRevealed = TRAIT_CATEGORIES.slice(0, 6);
     const player = makePlayer({ character: makeCharacterCard(sixRevealed) });
     const result = pickRandomUnrevealed(player, 2);
     expect(result).toHaveLength(1); // only 1 unrevealed left

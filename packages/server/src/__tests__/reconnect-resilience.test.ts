@@ -56,6 +56,7 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     startedAt: new Date(),
     endedAt: null,
     endReason: null,
+    startingPlayerCount: 2,
   };
   return {
     roomId: 'room-1',
@@ -168,7 +169,7 @@ describe('auto-elimination: single-elimination rule', () => {
     });
 
     const updatedRoom = store.getRoom('room-1')!;
-    const round = updatedRoom.game?.rounds[0]!;
+    const round = updatedRoom.game!.rounds[0];
     expect(round.eliminatedPlayerId).toBe('p1');
     expect(round.autoEliminationTriggered).toBe(true);
 

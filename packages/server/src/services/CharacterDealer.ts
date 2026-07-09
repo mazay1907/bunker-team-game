@@ -21,7 +21,7 @@ export class CharacterDealer {
    *
    * Throws if playerIds.length > minimum category pool size (prevents dealing
    * more players than there are distinct traits in the smallest category).
-   * In practice: each category has 30 entries and max players is 10 — this never throws.
+   * In practice: each category has 50 entries and max players is 10 — this never throws.
    */
   deal(playerIds: string[], contentData: ContentData): Map<string, CharacterCard> {
     const playerCount = playerIds.length;

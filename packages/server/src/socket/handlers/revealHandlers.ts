@@ -11,7 +11,7 @@
  * 4. None of the selected categories can already be revealed
  */
 
-import type { Server, Socket } from 'socket.io';
+import type { Server } from 'socket.io';
 import { z } from 'zod';
 import {
   EVENTS,
@@ -31,6 +31,7 @@ import type { RoomManager } from '../../services/RoomManager.js';
 import type { GameStateMachine } from '../../services/GameStateMachine.js';
 import type { TimerService } from '../../services/TimerService.js';
 import { pickRandomUnrevealed, getPlayersWhoHaveNotSubmitted } from '../../services/RevealAutoSelect.js';
+import type { AppSocket } from '../middleware.js';
 
 interface RevealHandlerDeps {
   io: Server;
@@ -47,13 +48,13 @@ const revealSubmitSchema = z.object({
     .max(7),
 });
 
-export function registerRevealHandlers(socket: Socket, deps: RevealHandlerDeps): void {
+export function registerRevealHandlers(socket: AppSocket, deps: RevealHandlerDeps): void {
   const { io, roomStore, roomManager, gsm, timerService } = deps;
 
   socket.on(
     EVENTS.REVEAL_SUBMIT,
     (raw: unknown, ack: (r: RevealSubmitAck) => void) => {
-      const playerId: string | undefined = socket.data.playerId;
+      const playerId = socket.data.playerId;
       if (!playerId) return ack({ ok: false, error: 'WRONG_PHASE' });
 
       const found = roomManager.findPlayerById(playerId);
@@ -100,7 +101,7 @@ export function registerRevealHandlers(socket: Socket, deps: RevealHandlerDeps):
 
       // Count remaining players who haven't submitted
       const updatedRoom = roomStore.getRoom(room.roomId)!;
-      const updatedRound = updatedRoom.game?.rounds[room.currentRound - 1]!;
+      const updatedRound = updatedRoom.game!.rounds[room.currentRound - 1]!;
       const activePlayers = [...updatedRoom.players.values()].filter(
         (p) => p.status === 'ACTIVE' || p.status === 'RECONNECTING',
       );
@@ -195,7 +196,7 @@ export function registerRevealHandlers(socket: Socket, deps: RevealHandlerDeps):
       if (!player?.character) continue;
       const revealedTraits = submission.revealedCategories
         .map((cat) => player.character!.traits[cat])
-        .filter((s): s is typeof s & NonNullable<typeof s> => s !== undefined);
+        .filter((s): s is NonNullable<typeof s> => s !== undefined);
 
       const finalPayload: RevealUpdatePayload = {
         playerId: pid,
@@ -237,7 +238,7 @@ function autoSubmitPendingReveals(
   roundNumber: 1 | 2 | 3,
   deps: Pick<RevealHandlerDeps, 'io' | 'roomStore' | 'gsm' | 'timerService'>,
 ): void {
-  const { io, roomStore, gsm, timerService } = deps;
+  const { io, roomStore, gsm } = deps;
   const room = roomStore.getRoom(roomId);
   if (!room || room.currentPhase !== 'REVEAL' || room.currentRound !== roundNumber) return;
 
@@ -293,7 +294,7 @@ function autoSubmitPendingReveals(
     if (!p?.character) continue;
     const revealedTraits = submission.revealedCategories
       .map((cat) => p.character!.traits[cat])
-      .filter((s): s is typeof s & NonNullable<typeof s> => s !== undefined);
+      .filter((s): s is NonNullable<typeof s> => s !== undefined);
     const finalPayload: RevealUpdatePayload = {
       playerId: pid,
       revealedTraits,

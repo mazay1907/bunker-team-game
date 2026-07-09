@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createServer } from 'http';
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, type DefaultEventsMap } from 'socket.io';
 import { io as ioClient, type Socket } from 'socket.io-client';
 import { EVENTS } from '@bunker/shared';
 import type {
@@ -14,7 +14,6 @@ import type {
   HostStartGameAck,
   HostPickScenarioAck,
   RevealSubmitAck,
-  VoteSubmitAck,
 } from '@bunker/shared';
 import { InMemoryRoomStore } from '../store/RoomStore.js';
 import { InMemorySessionStore } from '../store/SessionStore.js';
@@ -25,13 +24,13 @@ import { TimerService } from '../services/TimerService.js';
 import { VoteEngine } from '../services/VoteEngine.js';
 import { CharacterDealer } from '../services/CharacterDealer.js';
 import { ContentData } from '../content/ContentData.js';
-import { createSocketMiddleware } from '../socket/middleware.js';
+import { createSocketMiddleware, type SocketData } from '../socket/middleware.js';
 import { registerRoomHandlers } from '../socket/handlers/roomHandlers.js';
 import { registerHostHandlers } from '../socket/handlers/hostHandlers.js';
 import { registerRevealHandlers } from '../socket/handlers/revealHandlers.js';
 import { registerVoteHandlers } from '../socket/handlers/voteHandlers.js';
 
-let io: SocketIOServer;
+let io: SocketIOServer<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>;
 let serverPort: number;
 let roomStore: InMemoryRoomStore;
 let sessionStore: InMemorySessionStore;
@@ -51,7 +50,7 @@ beforeEach(async () => {
   roomManager = new RoomManager(roomStore, sessionStore, reconnectStore);
 
   const httpServer = createServer();
-  io = new SocketIOServer(httpServer, { cors: { origin: '*' } });
+  io = new SocketIOServer<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>(httpServer, { cors: { origin: '*' } });
   gsm = new GameStateMachine(roomStore, io);
   timerService = new TimerService(io);
   voteEngine = new VoteEngine();
@@ -78,7 +77,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   timerService.clearAll('*'); // best-effort cleanup
-  io.close();
+  void io.close();
 });
 
 function connectClient(auth?: Record<string, string | null>): Socket {

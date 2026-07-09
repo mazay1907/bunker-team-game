@@ -12,7 +12,7 @@
  * - host:playAgain    — reset to SCENARIO_PICK with same players
  */
 
-import type { Server, Socket } from 'socket.io';
+import type { Server } from 'socket.io';
 import { z } from 'zod';
 import {
   EVENTS,
@@ -54,6 +54,7 @@ import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 import { emitAnalytics } from '../../services/Analytics.js';
 import { callSurvivalWebhook, clearPredictionCache } from '../../services/SurvivalWebhook.js';
 import { startRevealPhaseTimer } from './revealHandlers.js';
+import type { AppSocket } from '../middleware.js';
 
 /** Server-side speaking order state per room — not in shared types */
 const debateSpeakingState = new Map<string, {
@@ -80,12 +81,12 @@ const kickSchema = z.object({
   targetPlayerId: z.string().uuid(),
 });
 
-export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): void {
+export function registerHostHandlers(socket: AppSocket, deps: HostHandlerDeps): void {
   const { io, roomStore, roomManager, gsm, timerService, dealer, contentData } = deps;
 
   /** Helper — find room where this socket is the host */
   function getHostRoom() {
-    const playerId: string | undefined = socket.data.playerId;
+    const playerId = socket.data.playerId;
     if (!playerId) return null;
     const found = roomManager.findPlayerById(playerId);
     if (!found) return null;
@@ -123,15 +124,12 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
     const nextIdx = state.currentSpeakerIndex + 1;
     if (nextIdx >= state.orderedPlayerIds.length) {
       debateSpeakingState.delete(roomId);
-      // 5-player mode: skip round 1 vote, go directly to R2_REVEAL
-      if (r.players.size === 5 && r.currentRound === 1) {
-        gsm.transitionTo(roomId, 'R2_REVEAL');
-        startRevealPhaseTimer(roomId, 2, { io, roomStore, roomManager, gsm, timerService });
-      } else {
-        const voteState = r.currentRound === 1 ? 'R1_VOTE' : r.currentRound === 2 ? 'R2_VOTE' : 'R3_VOTE';
-        gsm.transitionTo(roomId, voteState);
-        startVoteTimer(roomId);
-      }
+      // Voting always happens, every round, regardless of player count — the
+      // 5-player round-1 exception (GAME_RULES.md) only skips the ELIMINATION
+      // afterwards (handled in voteHandlers.ts resolveVotes), not the vote itself.
+      const voteState = r.currentRound === 1 ? 'R1_VOTE' : r.currentRound === 2 ? 'R2_VOTE' : 'R3_VOTE';
+      gsm.transitionTo(roomId, voteState);
+      startVoteTimer(roomId);
     } else {
       debateSpeakingState.set(roomId, { ...state, currentSpeakerIndex: nextIdx, waitingForNext: false });
       const changedPayload: DebateSpeakerChangedPayload = { currentSpeakerIndex: nextIdx };
@@ -274,11 +272,12 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
         startedAt: now,
         endedAt: null,
         endReason: null,
+        startingPlayerCount: room.players.size,
       };
 
       // Assign characters and save game
       roomStore.updateRoom(room.roomId, (r) => {
-        r.scenarioId = scenario!.id;
+        r.scenarioId = scenario.id;
         r.game = game;
         r.lastActivityAt = now;
         for (const [pid, card] of cards.entries()) {
@@ -344,14 +343,11 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
 
     timerService.cancelTimer(room.roomId);
     debateSpeakingState.delete(room.roomId);
-    // 5-player mode: skip round 1 vote, go directly to R2_REVEAL
-    if (room.players.size === 5 && room.currentRound === 1) {
-      gsm.transitionTo(room.roomId, 'R2_REVEAL');
-      startRevealPhaseTimer(room.roomId, 2, { io, roomStore, roomManager, gsm, timerService });
-    } else {
-      gsm.advance(room.roomId); // DEBATE → VOTE
-      startVoteTimer(room.roomId);
-    }
+    // Per GAME_RULES.md, the 5-player round-1 exception skips ELIMINATION only —
+    // voting still happens normally in every round. That exception is applied in
+    // voteHandlers.ts (resolveVotes), not here.
+    gsm.advance(room.roomId); // DEBATE → VOTE
+    startVoteTimer(room.roomId);
     return ack({ ok: true });
   });
 
@@ -386,7 +382,7 @@ export function registerHostHandlers(socket: Socket, deps: HostHandlerDeps): voi
 
   // ── host:nextSpeaker — allowed for host OR current speaker ───────────────────
   socket.on(EVENTS.HOST_NEXT_SPEAKER, (ack: (r: HostNextSpeakerAck) => void) => {
-    const playerId: string | undefined = socket.data.playerId;
+    const playerId = socket.data.playerId;
     if (!playerId) return ack({ ok: false, error: 'NOT_HOST' });
 
     const found = roomManager.findPlayerById(playerId);

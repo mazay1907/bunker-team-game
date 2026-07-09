@@ -15,7 +15,7 @@
  * - host:skipVote marks vote as abstention and re-checks completion (7.3.3)
  */
 
-import type { Server, Socket } from 'socket.io';
+import type { Server } from 'socket.io';
 import { z } from 'zod';
 import { EVENTS } from '@bunker/shared';
 import type {
@@ -38,6 +38,7 @@ import type { ContentData } from '../../content/ContentData.js';
 import { buildOutcomeSummary } from '../../services/OutcomeSummary.js';
 import { callSurvivalWebhook } from '../../services/SurvivalWebhook.js';
 import { startRevealPhaseTimer } from './revealHandlers.js';
+import type { AppSocket } from '../middleware.js';
 
 /** How long to hold a disconnected voter's slot before prompting host (seconds) */
 const DISCONNECTED_VOTER_HOLD_SECONDS = 30;
@@ -61,13 +62,13 @@ const skipVoteSchema = z.object({ disconnectedPlayerId: z.string().uuid() });
 let _voteCompletionChecker: ((roomId: string, roundNumber: 1 | 2 | 3) => void) | null = null;
 export const getVoteCompletionChecker = (): typeof _voteCompletionChecker => _voteCompletionChecker;
 
-export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): void {
+export function registerVoteHandlers(socket: AppSocket, deps: VoteHandlerDeps): void {
   const { io, roomStore, roomManager, gsm, voteEngine, timerService, contentData } = deps;
 
   socket.on(
     EVENTS.VOTE_SUBMIT,
     (raw: unknown, ack: (r: VoteSubmitAck) => void) => {
-      const playerId: string | undefined = socket.data.playerId;
+      const playerId = socket.data.playerId;
       if (!playerId) return ack({ ok: false, error: 'WRONG_PHASE' });
 
       const found = roomManager.findPlayerById(playerId);
@@ -160,7 +161,7 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
   socket.on(
     EVENTS.HOST_SKIP_VOTE,
     (raw: unknown, ack: (r: HostSkipVoteAck) => void) => {
-      const hostPlayerId: string | undefined = socket.data.playerId;
+      const hostPlayerId = socket.data.playerId;
       if (!hostPlayerId) return ack({ ok: false, error: 'NOT_HOST' });
 
       const found = roomManager.findPlayerById(hostPlayerId);
@@ -244,10 +245,6 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
     // Check for RECONNECTING players who haven't voted and don't have a pending timer
     for (const player of pending) {
       if (player.status !== 'RECONNECTING') continue;
-
-      const timerKey = `vote:${roomId}:${player.playerId}`;
-      // Only start timer once per reconnecting voter (re-use reconnect timer key)
-      // We store disconnected-voter prompt timers in TimerService under a special key
       scheduleDisconnectedVoterPrompt(roomId, player.playerId, roundNumber);
     }
   }
@@ -261,18 +258,10 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
     disconnectedPlayerId: string,
     roundNumber: 1 | 2 | 3,
   ): void {
-    // Use vote-specific reconnect timer so it doesn't conflict with the 5-min auto-elim timer
-    const voteTimerKey = `vote_${roomId}_${disconnectedPlayerId}`;
-
-    // Avoid double-scheduling by checking if a timer is already running
-    // We clear it and restart only if not already scheduled
-    // Use a simple Map stored in closure; TimerService handles only debate/reconnect timers
-    const delayMs = DISCONNECTED_VOTER_HOLD_SECONDS * 1000;
+    // Use a vote-namespaced roomId so this doesn't collide with the 5-min auto-elim reconnect timer
     timerService.startReconnectTimer(`vote:${roomId}`, disconnectedPlayerId, DISCONNECTED_VOTER_HOLD_SECONDS, () => {
       promptHostForDisconnectedVoter(roomId, disconnectedPlayerId, roundNumber, DISCONNECTED_VOTER_EXTENSION_SECONDS);
     });
-
-    void voteTimerKey; // used for documentation clarity
   }
 
   /**
@@ -326,8 +315,15 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
     const { leaders, tally } = voteEngine.tally(currentVotes);
 
     if (leaders.length === 1) {
-      // Clear winner
-      eliminatePlayer(roomId, leaders[0]!, roundNumber, 'VOTE');
+      // Clear winner — but the 5-player game exception (GAME_RULES.md "Виняток для
+      // 5 гравців") skips the actual elimination in round 1: voting happens normally,
+      // nobody is removed, and the game proceeds straight to round 2.
+      const startingPlayerCount = room.game?.startingPlayerCount ?? room.players.size;
+      if (startingPlayerCount === 5 && roundNumber === 1) {
+        resolveRoundWithoutElimination(roomId, roundNumber);
+      } else {
+        eliminatePlayer(roomId, leaders[0]!, roundNumber, 'VOTE');
+      }
     } else if (!isTiebreak) {
       // First tie — start tiebreak re-vote
       roomStore.updateRoom(roomId, (r) => {
@@ -379,6 +375,28 @@ export function registerVoteHandlers(socket: Socket, deps: VoteHandlerDeps): voi
     }
 
     void tally; // tally is broadcast via vote:update events as each vote comes in
+  }
+
+  /**
+   * Resolves a round that had a clear vote winner but must not eliminate anyone —
+   * the 5-player-game round-1 exception (GAME_RULES.md). Advances the game to the
+   * next round exactly like a normal elimination would, minus the PLAYER_ELIMINATED
+   * broadcast and the ELIMINATED status change.
+   *
+   * This exception only ever applies to round 1, so there is always a round 2 to
+   * advance into (round 3 always eliminates normally).
+   */
+  function resolveRoundWithoutElimination(roomId: string, roundNumber: 1 | 2 | 3): void {
+    timerService.cancelTimer(roomId);
+    roomStore.updateRoom(roomId, (r) => {
+      r.lastActivityAt = new Date();
+      return r;
+    });
+
+    const nextRoundNumber = (roundNumber + 1) as 2 | 3;
+    const nextReveal = roundNumber === 1 ? 'R2_REVEAL' : 'R3_REVEAL';
+    gsm.transitionTo(roomId, nextReveal);
+    startRevealPhaseTimer(roomId, nextRoundNumber, { io, roomStore, roomManager, gsm, timerService });
   }
 
   function eliminatePlayer(

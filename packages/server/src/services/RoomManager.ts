@@ -145,7 +145,7 @@ export class RoomManager {
 
     let visibleTraits: TraitSlot[] = [];
     if (player.character) {
-      const slots = Object.values(player.character.traits) as TraitSlot[];
+      const slots = Object.values(player.character.traits);
       if (isSelf || isEliminated) {
         visibleTraits = slots;
       } else {

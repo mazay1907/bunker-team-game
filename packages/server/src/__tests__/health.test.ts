@@ -18,7 +18,7 @@ beforeEach(async () => {
   const roomStore = new InMemoryRoomStore();
   const sessionStore = new InMemorySessionStore();
   const reconnectStore = new InMemoryReconnectStore();
-  await registerRoutes(app, { roomStore, sessionStore, reconnectStore });
+  registerRoutes(app, { roomStore, sessionStore, reconnectStore });
   await app.ready();
 });
 
