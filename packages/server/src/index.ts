@@ -33,6 +33,8 @@ import { AdminConfigService } from './services/AdminConfig.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Runtime config from environment. On hosted platforms (Railway, Render, etc.)
+// the platform injects PORT; set NODE_ENV=production and ALLOWED_ORIGIN=<public URL>.
 const PORT = parseInt(process.env['PORT'] ?? '3000', 10);
 const NODE_ENV = process.env['NODE_ENV'] ?? 'development';
 const ALLOWED_ORIGIN = process.env['ALLOWED_ORIGIN'] ?? `http://localhost:${PORT}`;
