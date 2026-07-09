@@ -8,6 +8,7 @@
 
 import { socket } from './socket.js';
 import { useGameStore } from '../store/gameStore.js';
+import { playTimerEndSound } from '../utils/sound.js';
 import { EVENTS } from '@bunker/shared';
 import type {
   RoomStatePayload,
@@ -248,6 +249,7 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
   // ── timer:ended — debate timer hit zero ───────────────────────────────────
   const onTimerEnded = (): void => {
     store.setDebateTimerEnded(true);
+    playTimerEndSound();
   };
 
   // ── debate:order — speaking order for this debate round ───────────────────
