@@ -11,7 +11,7 @@ WORKDIR /app
 RUN npm install -g pnpm@9 --quiet
 
 # Copy workspace configuration files
-COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+COPY package.json pnpm-workspace.yaml tsconfig.base.json pnpm-lock.yaml .npmrc ./
 
 # Copy package manifests for all workspaces (for dependency resolution)
 COPY packages/shared/package.json ./packages/shared/package.json
@@ -41,7 +41,7 @@ WORKDIR /app
 RUN npm install -g pnpm@9 --quiet
 
 # Copy workspace config for pnpm to understand the workspace structure
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/server/package.json ./packages/server/package.json
 COPY packages/shared/package.json ./packages/shared/package.json
 
