@@ -17,10 +17,10 @@ interface RouteDeps {
   reconnectStore: IReconnectStore;
 }
 
-export async function registerRoutes(
+export function registerRoutes(
   fastify: FastifyInstance,
   { roomStore, sessionStore, reconnectStore }: RouteDeps,
-): Promise<void> {
+): void {
   const roomManager = new RoomManager(roomStore, sessionStore, reconnectStore);
 
   fastify.get<{ Reply: HealthResponse }>('/health', async (_req, reply) => {

@@ -7,11 +7,10 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import staticPlugin from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, type DefaultEventsMap } from 'socket.io';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import { existsSync, writeFileSync } from 'fs';
-import { EVENTS } from '@bunker/shared';
 import { InMemoryRoomStore } from './store/RoomStore.js';
 import { InMemorySessionStore } from './store/SessionStore.js';
 import { InMemoryReconnectStore } from './store/ReconnectStore.js';
@@ -22,7 +21,7 @@ import { VoteEngine } from './services/VoteEngine.js';
 import { CharacterDealer } from './services/CharacterDealer.js';
 import { ContentData } from './content/ContentData.js';
 import { registerRoutes } from './http/routes.js';
-import { createSocketMiddleware } from './socket/middleware.js';
+import { createSocketMiddleware, type SocketData } from './socket/middleware.js';
 import { registerRoomHandlers } from './socket/handlers/roomHandlers.js';
 import { registerHostHandlers } from './socket/handlers/hostHandlers.js';
 import { registerRevealHandlers } from './socket/handlers/revealHandlers.js';
@@ -77,7 +76,7 @@ async function start(): Promise<void> {
       root: clientDistPath,
       prefix: '/',
       setHeaders: (res) => {
-        res.setHeader(
+        void res.setHeader(
           'Content-Security-Policy',
           `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:${PORT} wss://localhost:${PORT}`,
         );
@@ -91,10 +90,10 @@ async function start(): Promise<void> {
   }
 
   // ── HTTP routes ────────────────────────────────────────────────────────────────
-  await registerRoutes(fastify, { roomStore, sessionStore, reconnectStore });
+  registerRoutes(fastify, { roomStore, sessionStore, reconnectStore });
 
   // ── Socket.IO ──────────────────────────────────────────────────────────────────
-  const io = new SocketIOServer(fastify.server, {
+  const io = new SocketIOServer<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, SocketData>(fastify.server, {
     cors: {
       origin: ALLOWED_ORIGIN,
       methods: ['GET', 'POST'],
