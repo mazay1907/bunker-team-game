@@ -10,6 +10,14 @@
 
 ---
 
+## Bug Fixes (Confirmed, Priority over new features)
+
+- [x] **BUG-1** Fix session/reconnect data leaking across room codes (stale Zustand store + unscoped cookies on client, missing roomCode match check on server reconnect path). Full spec: `Reqs/BUGFIX_SESSION_ROOM_SCOPING.md`. Spans client (`socket.ts`, `HomePage.tsx`, `LobbyPage.tsx`, `GamePage.tsx`) and server (`roomHandlers.ts`). Developer-verified (typecheck/lint-on-changed-files/test/build green); pending Solution Architect review.
+- [x] **BUG-2** Fix phantom duplicate player when host finishes a game and immediately creates a new game in the same tab (regression of BUG-1: BUG-1's reconnect room-code-match check correctly rejects the stale token, but the first-time-join path it falls through to has no guard against the HTTP-pre-inserted, un-socketed host row already present in `room.players`, so `uniqueNickname()` mints a duplicate `"<nickname> (2)"` row). Full spec: `Reqs/BUGFIX_HOST_DUPLICATE_JOIN.md`. Requires both a client-side connection-hygiene fix (`HomePage.tsx`, `LobbyPage.tsx`, likely `socket.ts`) and a server-side defense-in-depth check in the first-time-join path (`roomHandlers.ts`) that attaches an incoming socket to an existing un-socketed same-session row instead of creating a new one. Must not reopen BUG-1's regressions. Developer-verified (typecheck/lint/test/build green, `ensureConnectedForRoom()` + server sessionToken-attach tests added); pending Solution Architect review.
+- [x] **BUG-3** (High priority — same class as BUG-1/BUG-2, blocks any repeat-play session) Fix stale Zustand store bleeding into a freshly created/joined room (client-only regression, not covered by BUG-1/BUG-2: `HomePage.handleCreateRoom`/`handleJoinRoom` and `LobbyPage`'s join effect never call `useGameStore`'s `reset()` before writing new-room state, and they write the new room's code into the store before `GamePage.tsx`'s existing room-code-mismatch reset guard ever sees a mismatch — so fields like `gameEnded`, `ownCharacter`, `game`, `votes` from a just-finished game survive into the next game and `GameOverScreen` renders over the new game's live phase). **Fix direction (SA-reviewed):** single choke-point store action `enterRoom(roomCode)` in `gameStore.ts` (compares incoming roomCode to `store.room?.roomCode`, resets only on genuine mismatch) called first-thing from all 4 sites — `HomePage.handleCreateRoom`, `HomePage.handleJoinRoom`, `LobbyPage` join effect, and replacing `GamePage.tsx:361-364`'s inline guard — instead of 3 independent ad-hoc `reset()` patches. Must not reset on same-room refresh (S5-1) or touch `socket.ts`/cookie state (BUG-1/BUG-2). Full spec incl. acceptance criteria + DoD: `Reqs/BUGFIX_STALE_STORE_ON_NEW_GAME.md`. Developer-verified (typecheck/test/build green, `enterRoom()` unit tests + LobbyPage-ordering simulation test added; existing BUG-1/BUG-2 regression suites still pass unmodified); pending Solution Architect review.
+
+---
+
 ## High Priority — MVP Foundations
 
 These tasks define the core architecture and the playable shell. They block everything else.
@@ -22,9 +30,9 @@ These tasks define the core architecture and the playable shell. They block ever
 - [ ] **HP-6** Build home page: "Створити кімнату" + "Приєднатися за кодом" actions (Ukrainian UI)
 - [ ] **HP-7** Build room creation flow (Scenario A): generate 6-char room code, create room state, redirect host to lobby
 - [ ] **HP-8** Build join flow via invite link (Scenario B): nickname entry, validation, join lobby
-- [ ] **HP-9** Build lobby UI: room code display, copy invite link button, real-time player list, host badge, "Почати гру" button (disabled until 6+ players)
-- [ ] **HP-10** Implement player count enforcement (6 min, 10 max) — disable Start button outside that range with tooltip
-- [ ] **HP-11** Author Ukrainian content for character traits — ~30 entries per category × 7 categories (Стать/вік, Професія, Здоров'я, Хобі, Фобія, Багаж, Факт). Store as structured JSON / YAML
+- [ ] **HP-9** Build lobby UI: room code display, copy invite link button, real-time player list, host badge, "Почати гру" button (disabled until 5+ players)
+- [ ] **HP-10** Implement player count enforcement (5 min, 10 max) — disable Start button outside that range with tooltip
+- [ ] **HP-11** Author Ukrainian content for character traits — 50 entries per category × 7 categories (Стать, Вік, Професія, Здоров'я, Хобі, Фобія, Багаж). Store as structured JSON / YAML
 - [ ] **HP-12** Author 3-5 Ukrainian apocalypse scenarios with title, description, bunker conditions
 - [ ] **HP-13** Implement scenario picker modal at game start (random or pick)
 - [ ] **HP-14** Implement character dealing: random unique character per player, no duplicates within session

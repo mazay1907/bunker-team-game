@@ -12,7 +12,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Copy, Check, Crown, X, Users, HelpCircle } from 'lucide-react';
-import { socket, RECONNECT_TOKEN_KEY, SESSION_TOKEN_KEY, getCookie, setCookie, claimSession } from '../socket/socket.js';
+import { socket, getCookie, setCookie, claimSession, ensureConnectedForRoom, setActiveRoomCode, sessionKey, reconnectKey } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type {
@@ -191,18 +191,16 @@ function LobbyPage(): JSX.Element {
   const doJoin = useCallback(async (joiningNickname: string): Promise<string | null> => {
     setIsJoining(true);
 
-    if (!socket.connected) {
-      socket.connect();
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('connect timeout')), 5000);
-        socket.once('connect', () => { clearTimeout(timeout); resolve(); });
-        socket.once('connect_error', (err) => { clearTimeout(timeout); reject(err); });
-      });
-    }
+    const upperRoomCode = (roomCode ?? '').toUpperCase();
+    // Ensures a fresh handshake for this room — forces a disconnect/reconnect
+    // cycle if the socket is still connected to a stale room (e.g. a fresh
+    // invite link opened in a tab left connected from a finished/left game;
+    // BUGFIX_HOST_DUPLICATE_JOIN Scenario C).
+    await ensureConnectedForRoom(upperRoomCode);
 
-    const sessionToken = getCookie(SESSION_TOKEN_KEY);
+    const sessionToken = getCookie(sessionKey(upperRoomCode));
     const payload: RoomJoinPayload = {
-      roomCode: (roomCode ?? '').toUpperCase(),
+      roomCode: upperRoomCode,
       nickname: joiningNickname,
       sessionToken,
     };
@@ -211,9 +209,9 @@ function LobbyPage(): JSX.Element {
       socket.emit(EVENTS.ROOM_JOIN, payload, (ack: RoomJoinAck) => {
         if (ack.ok) {
           setOwnPlayer(ack.player.playerId, ack.player.nickname);
-          setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+          setCookie(reconnectKey(upperRoomCode), ack.reconnectToken);
           if (!isFreshJoin.current) {
-            claimSession();
+            claimSession(upperRoomCode);
           }
           resolve(null);
         } else {
@@ -234,6 +232,14 @@ function LobbyPage(): JSX.Element {
   useEffect(() => {
     if (!roomCode) { navigate('/'); return; }
 
+    // Clear any stale state left over from a previously finished game in this
+    // same tab before any other store write, listener registration, or
+    // conditional early-return below (BUGFIX_STALE_STORE_ON_NEW_GAME). The
+    // return value is intentionally ignored here — the already-joined check
+    // below (storeState.ownPlayerId && storeState.room) serves this effect's
+    // own same-room-skip purpose independently.
+    useGameStore.getState().enterRoom(roomCode.toUpperCase());
+
     const cleanup = registerSocketListeners({
       onKicked: () => {
         navigate('/', { replace: true });
@@ -241,7 +247,9 @@ function LobbyPage(): JSX.Element {
     });
 
     const nickname = locationState?.nickname;
-    const reconnectToken = getCookie(RECONNECT_TOKEN_KEY);
+    // Scope active room code before reading the cookie — this room's key only
+    setActiveRoomCode(roomCode.toUpperCase());
+    const reconnectToken = getCookie(reconnectKey(roomCode.toUpperCase()));
 
     // Host navigated here from HomePage — already joined, just watch for events
     const storeState = useGameStore.getState();

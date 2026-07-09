@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { t } from '../i18n/t.js';
-import { socket, SESSION_TOKEN_KEY, RECONNECT_TOKEN_KEY, setCookie, claimSession } from '../socket/socket.js';
+import { socket, setCookie, claimSession, ensureConnectedForRoom, sessionKey, reconnectKey } from '../socket/socket.js';
 import { useGameStore } from '../store/gameStore.js';
 import { EVENTS } from '@bunker/shared';
 import type { RoomJoinPayload, RoomJoinAck, CreateRoomResponse } from '@bunker/shared';
@@ -68,19 +68,19 @@ function HomePage(): JSX.Element {
       }
 
       const data = (await response.json()) as CreateRoomResponse;
-      setCookie(SESSION_TOKEN_KEY, data.sessionToken);
-      setCookie(RECONNECT_TOKEN_KEY, data.reconnectToken);
+      setCookie(sessionKey(data.roomCode), data.sessionToken);
+      setCookie(reconnectKey(data.roomCode), data.reconnectToken);
+      // Clear any stale state left over from a previously finished game in this
+      // same tab before writing the new room's data (BUGFIX_STALE_STORE_ON_NEW_GAME).
+      useGameStore.getState().enterRoom(data.roomCode);
       setOwnPlayer(data.playerId, createNickname.trim());
-      socket.connect();
-
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('connect timeout')), 5000);
-        if (socket.connected) { clearTimeout(timeout); resolve(); return; }
-        socket.once('connect', () => { clearTimeout(timeout); resolve(); });
-        socket.once('connect_error', (err) => { clearTimeout(timeout); reject(err); });
-      });
-      // Tell other tabs that this tab has claimed the session
-      claimSession();
+      // Ensures a fresh handshake for this brand-new room — forces a
+      // disconnect/reconnect cycle if the socket is still connected to a
+      // stale room from a previously finished game in this same tab
+      // (BUGFIX_HOST_DUPLICATE_JOIN, prevents the phantom-host-row bug).
+      await ensureConnectedForRoom(data.roomCode);
+      // Tell other tabs that this tab has claimed the session for this room
+      claimSession(data.roomCode);
 
       const joinPayload: RoomJoinPayload = {
         roomCode: data.roomCode,
@@ -93,7 +93,7 @@ function HomePage(): JSX.Element {
           if (ack.ok) {
             setRoom(ack.room);
             setPlayers([ack.player]);
-            setCookie(RECONNECT_TOKEN_KEY, ack.reconnectToken);
+            setCookie(reconnectKey(data.roomCode), ack.reconnectToken);
             resolve();
           } else {
             reject(new Error(ack.error));
@@ -124,6 +124,9 @@ function HomePage(): JSX.Element {
     setJoinError(null);
     setIsJoining(true);
     try {
+      // Clear any stale state left over from a previously finished game in this
+      // same tab before writing the joined room's data (BUGFIX_STALE_STORE_ON_NEW_GAME).
+      useGameStore.getState().enterRoom(codeUpper);
       setOwnPlayer('', joinNickname.trim());
       navigate(`/r/${codeUpper}`, { state: { nickname: joinNickname.trim() } });
     } catch {

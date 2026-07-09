@@ -23,13 +23,13 @@ function makePlayer(nickname: string, profession?: string): Player {
       ? {
           playerId: `p-${nickname}`,
           traits: {
-            GENDER_AGE: { category: 'GENDER_AGE', traitId: 'ga-1', value: 'Чоловік 30 р.', isRevealed: true },
+            GENDER: { category: 'GENDER', traitId: 'gen-1', value: 'Чоловік', isRevealed: true },
+            AGE: { category: 'AGE', traitId: 'age-1', value: '30 років', isRevealed: true },
             PROFESSION: { category: 'PROFESSION', traitId: 'prof-1', value: profession, isRevealed: true },
             HEALTH: { category: 'HEALTH', traitId: 'h-1', value: 'Здоровий', isRevealed: false },
             HOBBY: { category: 'HOBBY', traitId: 'hob-1', value: 'Плавання', isRevealed: false },
             PHOBIA: { category: 'PHOBIA', traitId: 'ph-1', value: 'Темнота', isRevealed: false },
             BAGGAGE: { category: 'BAGGAGE', traitId: 'bg-1', value: 'Аптечка', isRevealed: false },
-            SECRET_FACT: { category: 'SECRET_FACT', traitId: 'sf-1', value: 'Знає мови', isRevealed: false },
           },
         }
       : null,

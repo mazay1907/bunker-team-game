@@ -57,7 +57,7 @@ describe('pickRandomUnrevealed', () => {
   });
 
   it('returns only categories that are NOT already revealed', () => {
-    const alreadyRevealed: TraitCategory[] = ['GENDER_AGE', 'PROFESSION', 'HEALTH'];
+    const alreadyRevealed: TraitCategory[] = ['GENDER', 'PROFESSION', 'HEALTH'];
     const player = makePlayer({ character: makeCharacterCard(alreadyRevealed) });
     const result = pickRandomUnrevealed(player, 2);
 

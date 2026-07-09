@@ -27,22 +27,22 @@ export type PlayerStatus = 'ACTIVE' | 'RECONNECTING' | 'SPECTATOR' | 'KICKED';
  * Values map to Ukrainian display labels in uk.json.
  */
 export type TraitCategory =
-  | 'GENDER_AGE' // Стать / вік
+  | 'GENDER' // Стать
+  | 'AGE' // Вік
   | 'PROFESSION' // Професія
   | 'HEALTH' // Здоров'я
   | 'HOBBY' // Хобі
   | 'PHOBIA' // Фобія
-  | 'BAGGAGE' // Багаж
-  | 'SECRET_FACT'; // Факт
+  | 'BAGGAGE'; // Багаж
 
 export const TRAIT_CATEGORIES: TraitCategory[] = [
-  'GENDER_AGE',
+  'GENDER',
+  'AGE',
   'PROFESSION',
   'HEALTH',
   'HOBBY',
   'PHOBIA',
   'BAGGAGE',
-  'SECRET_FACT',
 ];
 
 // ─── Content types (loaded from JSON at startup) ────────────────────────────────

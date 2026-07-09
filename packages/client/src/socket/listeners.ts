@@ -46,6 +46,12 @@ export function registerSocketListeners(options?: ListenerOptions): () => void {
 
   // ── room:state — full re-sync on join or reconnect ────────────────────────
   const onRoomState = (payload: RoomStatePayload): void => {
+    // Defense-in-depth (BUGFIX_STALE_STORE_ON_NEW_GAME, optional hardening):
+    // the call-site enterRoom() placements are sufficient on their own, but
+    // guard here too in case a future room:state delivery races ahead of them.
+    if (store.room && store.room.roomCode !== payload.room.roomCode) {
+      store.reset();
+    }
     store.setRoom(payload.room);
     store.setPlayers(payload.players);
     store.setOwnCharacter(payload.ownCharacter);
