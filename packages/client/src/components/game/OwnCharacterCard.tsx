@@ -79,7 +79,7 @@ export function OwnCharacterCard({
                 <p className="font-inter text-xs text-bunker-muted uppercase tracking-[0.06em]">
                   {t(`trait.category.${cat}` as Parameters<typeof t>[0])}
                 </p>
-                <p className="font-inter text-sm text-bunker-text mt-0.5 truncate">
+                <p className="font-inter text-sm text-bunker-text mt-0.5 break-words">
                   {slot.value}
                 </p>
               </div>

@@ -100,6 +100,13 @@
   "end.survivalPrediction": "Прогноз виживання людства",
   "end.predictionLoading": "Аналізуємо шанси на виживання…",
 
+  "end.summary.earlyEnd": "Гру завершено достроково.",
+  "end.summary.noSurvivors": "Ніхто не потрапив до бункера. Людство не вижило.",
+  "end.summary.survivorsOne": "У бункері залишилась {{count}} людина: {{list}}.",
+  "end.summary.survivorsFew": "У бункері залишились {{count}} людини: {{list}}.",
+  "end.summary.survivorsMany": "У бункері залишились {{count}} людей: {{list}}.",
+  "end.summary.excluded": "Виключено: {{list}}.",
+
   "scenario.pick.title": "Виберіть сценарій",
   "scenario.pick.random": "Випадково",
   "scenario.pick.confirm": "Почати гру",
